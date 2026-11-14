@@ -1,6 +1,9 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "heavy-13",
+  "compatibility_date": "2025-03-01",
   "assets": {
     "directory": "./dist",
-    "base_path": "/heavy-13"
+    "not_found_handling": "single-page-application"
   }
 }

@@ -92,12 +92,23 @@ node -e "console.log(require('crypto').createHash('sha256').update('your-passwor
 VITE_APP_PASSCODE_HASH=생성된_64자리_SHA256_해시값
 ```
 
-### 3. 프로덕션 빌드 (Cloudflare Pages)
+### 3. 프로덕션 빌드 및 Cloudflare 배포 (Wrangler)
 ```bash
+# 정적 프로덕션 빌드 (dist 생성)
 npm run build
+
+# Wrangler 로컬 프리뷰 서버 실행
+npm run cf:dev
+
+# Cloudflare Workers Static Assets 배포 (wrangler.jsonc 기준)
+npm run deploy
+
+# 또는 Cloudflare Pages 직접 배포
+npm run deploy:pages
 ```
 * **Build command:** `npm run build`
 * **Build output directory:** `dist`
+* **Config file:** `wrangler.jsonc` (`assets.directory: "./dist"`, `not_found_handling: "single-page-application"`)
 
 ---
 
