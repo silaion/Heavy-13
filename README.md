@@ -68,3 +68,40 @@ src/
 ├── store/            # Zustand 전역 게임 상태 스토어
 ├── types/            # 도메인 모델, P2P 메시지 프로토콜, Sanitized 뷰 모델 타입 정의
 └── utils/            # Web Audio 효과음 합성기 및 SHA-256 해시 검증 유틸리티
+```
+
+---
+
+## 🚀 로컬 실행 및 배포 방법
+
+### 1. 의존성 설치 및 개발 서버 실행
+```bash
+npm install
+npm run dev
+```
+
+### 2. 입장 비밀번호 해시 설정 (`.env`)
+원하는 비밀번호를 SHA-256 해시로 변환한 뒤 프로젝트 루트의 `.env` 파일(또는 Cloudflare Pages 환경 변수)에 등록합니다.
+
+```bash
+# 비밀번호 SHA-256 해시 생성 예시
+node -e "console.log(require('crypto').createHash('sha256').update('your-password').digest('hex'))"
+```
+
+```env
+VITE_APP_PASSCODE_HASH=생성된_64자리_SHA256_해시값
+```
+
+### 3. 프로덕션 빌드 (Cloudflare Pages)
+```bash
+npm run build
+```
+* **Build command:** `npm run build`
+* **Build output directory:** `dist`
+
+---
+
+## 📌 라이선스 및 저작권 안내
+
+* 본 리포지토리의 소스 코드는 개발자 개인의 학습 및 포트폴리오·취미 목적으로 작성되었습니다.
+* 게임의 기본 콘셉트와 명칭에 대한 권리는 원저작권자에게 있으며, 무단 상업적 배포 및 영리 목적의 이용을 금합니다.
