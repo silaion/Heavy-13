@@ -3,7 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Bot,
+  CheckCircle2,
+  Clock,
   Crown,
+  Eye,
+  ListOrdered,
   LogOut,
   RefreshCw,
   ShieldAlert,
@@ -16,6 +20,9 @@ import {
 import type {
   CarrierColor,
   CarrierStone,
+  ChipColor,
+  PlacementQueueItem,
+  RoundPhase,
   SanitizedOpponent,
 } from '../types/game';
 import {
@@ -26,12 +33,14 @@ import {
 import { useTranslation } from '../i18n/useTranslation';
 import { useGameStore } from '../store/useGameStore';
 import {
+  playChipSelect,
   playOverload,
   playPass,
   playStonePlace,
   playTurnAlert,
 } from '../utils/soundEffects';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { RuleButton, RuleModal } from './RuleModal';
 
 export interface GameBoardProps {
   onLeaveRoom: () => void;
@@ -70,6 +79,14 @@ const PILLAR_THEME: Record<
   },
 };
 
+const CHIP_PILL_STYLE: Record<ChipColor, string> = {
+  RED: 'bg-red-500/25 text-red-200 border-red-500/50',
+  GREEN: 'bg-green-500/25 text-green-200 border-green-500/50',
+  BLUE: 'bg-blue-500/25 text-blue-200 border-blue-500/50',
+  RAINBOW:
+    'bg-gradient-to-r from-red-500/40 via-amber-400/40 to-blue-500/40 text-amber-100 border-amber-400/70',
+};
+
 function AtlasCarrierSilhouette({ className }: { className?: string }) {
   return (
     <svg
@@ -101,7 +118,8 @@ function chunkStonesIntoRows(
 }
 
 export function GameBoard({ onLeaveRoom }: GameBoardProps) {
-  const { t, tColor, tChipBadge, tPlayerName, tLog } = useTranslation();
+  const { t, tColor, tChipBadge, tPlayerName, tLog, tPhaseTitle } =
+    useTranslation();
 
   const role = useGameStore((s) => s.role);
   const viewState = useGameStore((s) => s.viewState);
@@ -113,6 +131,7 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
   const [activeExplosionId, setActiveExplosionId] = useState<string | null>(
     null
   );
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState<boolean>(false);
 
   // 이전 상태 비교용 Ref (초기 마운트 시 불필요한 사운드 재생 방지 및 P2P/봇 액션 동기화 사운드 트리거)
   const hasMountedRef = useRef<boolean>(false);
@@ -124,6 +143,9 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
     viewState?.currentTurnPlayerId ?? null
   );
   const prevPhaseRef = useRef<string | null>(viewState?.phase ?? null);
+  const prevRoundPhaseRef = useRef<RoundPhase | null>(
+    viewState?.roundPhase ?? null
+  );
 
   useEffect(() => {
     if (!lastExplosion) return;
@@ -136,7 +158,7 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
     return () => window.clearTimeout(timer);
   }, [lastExplosion?.id]);
 
-  // P2P 상태 동기화 기반 사운드 이펙트 트리거 (돌 안착, 패스, 13 폭발, 내 턴 알림)
+  // P2P 상태 동기화 기반 사운드 이펙트 트리거 (돌 안착, 패스, 13 폭발, 단계 전환, 내 턴 알림)
   useEffect(() => {
     if (!viewState) return;
 
@@ -145,6 +167,7 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
     const currentExplosionId = viewState.lastExplosion?.id ?? null;
     const currentTurnId = viewState.currentTurnPlayerId;
     const currentPhase = viewState.phase;
+    const currentRoundPhase = viewState.roundPhase;
 
     if (!hasMountedRef.current) {
       hasMountedRef.current = true;
@@ -152,7 +175,12 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
       prevExplosionIdRef.current = currentExplosionId;
       prevTurnPlayerIdRef.current = currentTurnId;
       prevPhaseRef.current = currentPhase;
-      if (currentPhase === 'PLAYING' && currentTurnId === myPlayerId) {
+      prevRoundPhaseRef.current = currentRoundPhase;
+      if (
+        currentPhase === 'PLAYING' &&
+        (currentRoundPhase === 'SELECTION' ||
+          (currentRoundPhase === 'PLACEMENT' && currentTurnId === myPlayerId))
+      ) {
         playTurnAlert();
       }
       return;
@@ -180,14 +208,31 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
       }
     }
 
-    // 3) 다른 플레이어/봇 턴이 끝나고 내 차례가 되었을 때 차임벨 알림음 재생
-    const becameMyTurn =
+    // 3) 칩 공개 / 카드 공개 단계 진입 시 경쾌한 클릭 효과음
+    if (
       currentPhase === 'PLAYING' &&
-      currentTurnId === myPlayerId &&
-      (prevTurnPlayerIdRef.current !== myPlayerId ||
+      currentRoundPhase !== prevRoundPhaseRef.current &&
+      (currentRoundPhase === 'REVEAL_CHIPS' ||
+        currentRoundPhase === 'REVEAL_CARDS')
+    ) {
+      playChipSelect();
+    }
+
+    // 4) 동시 선택 단계 시작 또는 PLACEMENT에서 내 배치 차례가 되었을 때 차임벨 알림음 재생
+    const becameSelectionPhase =
+      currentPhase === 'PLAYING' &&
+      currentRoundPhase === 'SELECTION' &&
+      (prevRoundPhaseRef.current !== 'SELECTION' ||
         prevPhaseRef.current !== 'PLAYING');
 
-    if (becameMyTurn) {
+    const becameMyPlacementTurn =
+      currentPhase === 'PLAYING' &&
+      currentRoundPhase === 'PLACEMENT' &&
+      currentTurnId === myPlayerId &&
+      (prevTurnPlayerIdRef.current !== myPlayerId ||
+        prevRoundPhaseRef.current !== 'PLACEMENT');
+
+    if (becameSelectionPhase || becameMyPlacementTurn) {
       window.setTimeout(() => {
         playTurnAlert();
       }, 140);
@@ -197,10 +242,8 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
     prevExplosionIdRef.current = currentExplosionId;
     prevTurnPlayerIdRef.current = currentTurnId;
     prevPhaseRef.current = currentPhase;
-  }, [
-    viewState,
-    myPlayerId,
-  ]);
+    prevRoundPhaseRef.current = currentRoundPhase;
+  }, [viewState, myPlayerId]);
 
   if (!viewState) return null;
 
@@ -208,9 +251,14 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
     round,
     half,
     phase,
+    roundPhase,
     players,
+    startPlayerId,
+    submissions,
+    placementQueue,
     currentTurnPlayerId,
-    roundStarterIndex,
+    turnQueue,
+    passedQueue,
     carriers,
     lastSubmitted,
     eliminatedPlayerIds,
@@ -218,13 +266,123 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
   } = viewState;
 
   const currentTurnPlayer = players.find((p) => p.id === currentTurnPlayerId);
+  const startPlayer = players.find((p) => p.id === startPlayerId);
+  const submittedCount = players.filter((p) => p.hasSubmittedThisRound).length;
+  const isPassedTurnOrder =
+    roundPhase === 'PLACEMENT' &&
+    turnQueue.length === 0 &&
+    passedQueue.length > 0;
+
+  const getPhaseDescription = (): string => {
+    switch (roundPhase) {
+      case 'SELECTION':
+        return t('phaseDesc_SELECTION', { submittedCount });
+      case 'REVEAL_CHIPS':
+        return t('phaseDesc_REVEAL_CHIPS');
+      case 'REVEAL_CARDS':
+        return t('phaseDesc_REVEAL_CARDS');
+      case 'PLACEMENT':
+      case 'ROUND_END':
+        return isPassedTurnOrder
+          ? t('phaseDesc_PLACEMENT_PASSED')
+          : t('phaseDesc_PLACEMENT_REGULAR');
+    }
+  };
+
+  const renderPlacementQueueItem = (item: PlacementQueueItem) => {
+    const isCurrentTurn =
+      phase === 'PLAYING' &&
+      roundPhase === 'PLACEMENT' &&
+      item.playerId === currentTurnPlayerId;
+    const isMe = item.playerId === myPlayerId;
+    const isStarter = item.playerId === startPlayerId;
+    const displayName = tPlayerName({
+      id: item.playerId,
+      name: item.playerName,
+    });
+
+    return (
+      <div
+        key={item.playerId}
+        className={`rounded-xl border px-2.5 py-2 flex flex-col justify-between gap-1.5 transition-all ${
+          isCurrentTurn
+            ? 'border-amber-400 bg-amber-500/20 ring-2 ring-amber-400/50 shadow-md shadow-amber-500/15'
+            : item.status === 'PLACED'
+              ? 'border-emerald-500/35 bg-emerald-950/25 opacity-75'
+              : item.status === 'PASSED'
+                ? 'border-purple-500/45 bg-purple-950/30'
+                : 'border-zinc-800 bg-zinc-900/80'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-1">
+          <span
+            className={`text-[10px] font-black font-mono px-1.5 py-0.5 rounded ${
+              isCurrentTurn
+                ? 'bg-amber-400 text-zinc-950'
+                : 'bg-zinc-800 text-zinc-300'
+            }`}
+          >
+            #{item.priorityOrder}
+          </span>
+          <div className="flex items-center gap-1">
+            {isStarter && (
+              <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-500/25 text-amber-300">
+                {t('starterBadge')}
+              </span>
+            )}
+            {isMe && (
+              <span className="text-[9px] font-extrabold px-1 py-0.5 rounded bg-sky-400 text-zinc-950">
+                {t('meBadge')}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="font-bold text-xs text-white truncate">
+          {displayName}
+        </div>
+
+        <div className="flex items-center justify-between gap-1 pt-0.5">
+          <span
+            className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded border truncate ${CHIP_PILL_STYLE[item.chip]}`}
+          >
+            {tColor(item.chip)}
+          </span>
+          <span className="w-6 h-6 rounded-md bg-stone-200 text-stone-900 border border-stone-400 font-serif font-extrabold text-sm flex items-center justify-center shrink-0">
+            {item.card}
+          </span>
+        </div>
+
+        <div className="text-[10px] font-bold pt-0.5 flex items-center justify-between">
+          {isCurrentTurn ? (
+            <span className="text-amber-300 animate-pulse">
+              {t('queueStatusActive')}
+            </span>
+          ) : item.status === 'PLACED' ? (
+            <span className="text-emerald-300">
+              {t('queueStatusPlaced')}
+              {item.placedCarrier ? ` (${tColor(item.placedCarrier)})` : ''}
+            </span>
+          ) : item.status === 'PASSED' ? (
+            <span className="text-purple-300">{t('queueStatusPassed')}</span>
+          ) : (
+            <span className="text-zinc-400">{t('queueStatusPending')}</span>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderPlayerCard = (p: SanitizedOpponent) => {
-    const isCurrentTurn = phase === 'PLAYING' && p.id === currentTurnPlayerId;
+    const isCurrentTurn =
+      phase === 'PLAYING' &&
+      roundPhase === 'PLACEMENT' &&
+      p.id === currentTurnPlayerId;
     const isMe = p.id === myPlayerId;
-    const isStarter = p.slotIndex === roundStarterIndex;
+    const isStarter = p.id === startPlayerId;
     const isEliminated = eliminatedPlayerIds.includes(p.id);
     const displayName = tPlayerName(p);
+    const submission = submissions[p.id];
 
     return (
       <div
@@ -294,11 +452,47 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
           </div>
         </div>
 
+        {/* 이번 라운드 제출 칩/카드 공개 상태 */}
+        {submission && submission.hasSubmitted && (
+          <div className="mt-2 rounded-lg bg-zinc-950/80 border border-zinc-800 px-2 py-1 flex items-center justify-between gap-1.5 text-[11px]">
+            {submission.chip ? (
+              <span
+                className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded border ${CHIP_PILL_STYLE[submission.chip]}`}
+              >
+                {tChipBadge(submission.chip)}
+              </span>
+            ) : (
+              <span className="text-[10px] font-semibold text-emerald-300 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                {t('selectionDoneBadge')}
+              </span>
+            )}
+
+            <span
+              className={`px-2 py-0.5 rounded font-mono font-extrabold text-xs ${
+                submission.card !== null
+                  ? 'bg-stone-200 text-stone-900'
+                  : 'bg-zinc-800 text-zinc-400'
+              }`}
+            >
+              {submission.card !== null
+                ? submission.card
+                : t('hiddenCardLabel')}
+            </span>
+          </div>
+        )}
+
         <div className="mt-2 flex items-center justify-between text-[10px]">
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {isStarter && (
               <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold">
                 {t('starterBadge')}
+              </span>
+            )}
+            {roundPhase === 'SELECTION' && !p.hasSubmittedThisRound && (
+              <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-semibold flex items-center gap-0.5">
+                <Clock className="w-2.5 h-2.5" />
+                {t('selectionSelectingBadge')}
               </span>
             )}
             {p.hasPassedThisRound && !p.hasActedThisRound && (
@@ -466,27 +660,40 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
     <div className="w-full max-w-6xl mx-auto px-3 sm:px-6 pt-3 pb-4 space-y-4">
       {/* 상단 상태 헤더 바 (우측 상단에 LanguageSwitcher 배치) */}
       <header className="rounded-2xl border border-zinc-800 bg-zinc-900/80 backdrop-blur-md px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           <div className="px-3 py-1 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 font-extrabold text-xs sm:text-sm">
             {t('roundBadge', { round, maxRounds: MAX_ROUNDS })}
           </div>
           <div className="text-xs sm:text-sm font-semibold text-zinc-300">
             {half === 1 ? t('firstHalfLabel') : t('secondHalfLabel')}
           </div>
-          <div className="hidden sm:inline-block text-xs text-zinc-500 font-mono">
+          {startPlayer && (
+            <div className="text-xs px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex items-center gap-1.5">
+              <Crown className="w-3.5 h-3.5 text-amber-400" />
+              <span>{t('firstPlayerLabel')}</span>
+              <strong className="text-amber-300">
+                {tPlayerName(startPlayer)}
+              </strong>
+            </div>
+          )}
+          <div className="hidden md:inline-block text-xs text-zinc-500 font-mono">
             {t('roomCodeLabel')} {viewState.roomCode}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {currentTurnPlayer && phase === 'PLAYING' && (
-            <div className="text-xs sm:text-sm px-3 py-1 rounded-xl bg-zinc-800 text-zinc-200 font-medium">
-              {t('currentTurnLabel')}{' '}
-              <span className="font-bold text-amber-400">
-                {tPlayerName(currentTurnPlayer)}
-              </span>
-            </div>
-          )}
+          {currentTurnPlayer &&
+            phase === 'PLAYING' &&
+            roundPhase === 'PLACEMENT' && (
+              <div className="text-xs sm:text-sm px-3 py-1 rounded-xl bg-zinc-800 text-zinc-200 font-medium">
+                {t('currentTurnLabel')}{' '}
+                <span className="font-bold text-amber-400">
+                  {tPlayerName(currentTurnPlayer)}
+                </span>
+              </div>
+            )}
+
+          <RuleButton onClick={() => setIsRuleModalOpen(true)} />
 
           <LanguageSwitcher />
 
@@ -500,6 +707,38 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
           </button>
         </div>
       </header>
+
+      {/* 현재 라운드 페이즈 배너 및 배치 순서 큐(Placement Queue) */}
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-3.5 sm:p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-lg bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs font-extrabold flex items-center gap-1.5">
+              <Eye className="w-3.5 h-3.5" />
+              {tPhaseTitle(roundPhase, isPassedTurnOrder)}
+            </span>
+            <p className="text-xs text-zinc-300">{getPhaseDescription()}</p>
+          </div>
+        </div>
+
+        {/* REVEAL_CARDS / PLACEMENT 단계: 확정된 배치 순서 큐(Placement Queue) 표시 */}
+        {placementQueue.length > 0 && (
+          <div className="space-y-2 pt-1 border-t border-zinc-800/80">
+            <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
+              <div className="font-extrabold text-amber-300 flex items-center gap-1.5">
+                <ListOrdered className="w-4 h-4" />
+                <span>{t('placementQueueTitle')}</span>
+              </div>
+              <span className="text-[11px] text-zinc-400">
+                {t('placementQueueHint')}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+              {placementQueue.map(renderPlacementQueueItem)}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* 중앙 3색 짐꾼 받침대(RED / GREEN / BLUE) 및 2열 돌 적층 스테이지 */}
       <section className="rounded-3xl border border-zinc-800 bg-zinc-950/95 p-4 sm:p-6 shadow-2xl space-y-4">
@@ -549,7 +788,9 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
                   name: lastExplosion.playerName,
                 }),
                 finalSum: lastExplosion.finalSum,
+                collectedCount: lastExplosion.collectedCount,
                 penalty: lastExplosion.penaltyAdded,
+                newBaseSum: lastExplosion.newBaseSum,
               })}
             </span>
           </div>
@@ -728,6 +969,12 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
           </div>
         </div>
       )}
+
+      {/* 언제든 열람 가능한 반응형 게임 규칙 모달 */}
+      <RuleModal
+        isOpen={isRuleModalOpen}
+        onClose={() => setIsRuleModalOpen(false)}
+      />
     </div>
   );
 }

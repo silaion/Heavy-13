@@ -17,6 +17,7 @@ import {
 import { useTranslation } from '../i18n/useTranslation';
 import { useGameStore } from '../store/useGameStore';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { RuleButton, RuleModal } from './RuleModal';
 
 export interface LobbyProps {
   initialRoomCode?: string;
@@ -44,6 +45,7 @@ export function Lobby({
   const [playerName, setPlayerName] = useState<string>('');
   const [joinCodeInput, setJoinCodeInput] = useState<string>(initialRoomCode);
   const [copiedType, setCopiedType] = useState<'CODE' | 'LINK' | null>(null);
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState<boolean>(false);
 
   const localizedConnectionError = tError(connectionError);
 
@@ -68,8 +70,9 @@ export function Lobby({
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-zinc-900/80 backdrop-blur-md p-6 sm:p-8 shadow-2xl space-y-6">
-          {/* 우측 상단 언어 전환 스위치 */}
-          <div className="flex justify-end">
+          {/* 우측 상단 게임 규칙(?) 버튼 및 언어 전환 스위치 */}
+          <div className="flex items-center justify-end gap-1.5">
+            <RuleButton onClick={() => setIsRuleModalOpen(true)} />
             <LanguageSwitcher />
           </div>
 
@@ -188,6 +191,11 @@ export function Lobby({
             </ul>
           </div>
         </div>
+
+        <RuleModal
+          isOpen={isRuleModalOpen}
+          onClose={() => setIsRuleModalOpen(false)}
+        />
       </div>
     );
   }
@@ -199,8 +207,9 @@ export function Lobby({
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-2xl rounded-3xl border border-zinc-800 bg-zinc-900/85 backdrop-blur-md p-6 sm:p-8 shadow-2xl space-y-6">
-        {/* 우측 상단 언어 전환 스위치 */}
-        <div className="flex justify-end">
+        {/* 우측 상단 게임 규칙(?) 버튼 및 언어 전환 스위치 */}
+        <div className="flex items-center justify-end gap-1.5">
+          <RuleButton onClick={() => setIsRuleModalOpen(true)} />
           <LanguageSwitcher />
         </div>
 
@@ -366,6 +375,11 @@ export function Lobby({
           )}
         </div>
       </div>
+
+      <RuleModal
+        isOpen={isRuleModalOpen}
+        onClose={() => setIsRuleModalOpen(false)}
+      />
     </div>
   );
 }

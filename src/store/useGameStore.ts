@@ -17,7 +17,7 @@ import {
   startGame,
   validateAction,
 } from '../engine/rules';
-import { scheduleBotTurn } from '../engine/botAI';
+import { scheduleRoundAutomation } from '../engine/botAI';
 import { playChipSelect } from '../utils/soundEffects';
 
 export type NetworkRole = 'NONE' | 'HOST' | 'GUEST';
@@ -26,9 +26,12 @@ export type BroadcastSyncCallback = (hostState: HostGameState) => void;
 export type GuestActionSender = (
   action:
     | {
-        type: 'SUBMIT_COMBO';
+        type: 'LOCK_IN_SELECTION';
         card: RockCard;
         chip: ChipColor;
+      }
+    | {
+        type: 'EXECUTE_PLACEMENT';
         targetCarrier?: CarrierColor;
       }
     | { type: 'PASS_TURN' }
@@ -46,8 +49,11 @@ export interface GameStoreState {
   hostState: HostGameState | null;
   viewState: SanitizedGameState | null;
 
+  // SELECTION 단계: 손패에서 선택한 카드 & 칩
   selectedCard: RockCard | null;
   selectedChip: ChipColor | null;
+
+  // PLACEMENT 단계: RAINBOW 칩 제출자가 자신의 배치 차례에 선택한 대상 받침대
   selectedTargetCarrier: CarrierColor | null;
 
   registerBroadcastCallback: (cb: BroadcastSyncCallback | null) => void;
@@ -75,25 +81,27 @@ export interface GameStoreState {
   initGuestSession: (roomCode: string, guestId: string, guestName: string) => void;
   applyGuestStateSync: (sanitizedState: SanitizedGameState) => void;
 
-  submitSelectedCombo: () => { valid: boolean; reason?: string };
+  // 플레이어 인터랙션 액션
+  lockInSelection: () => { valid: boolean; reason?: string };
+  confirmPlacement: () => { valid: boolean; reason?: string };
   passTurn: () => { valid: boolean; reason?: string };
   leaveRoom: () => void;
 }
 
-let activeBotCleanup: (() => void) | null = null;
+let activeAutomationCleanup: (() => void) | null = null;
 let broadcastCallback: BroadcastSyncCallback | null = null;
 let guestActionSender: GuestActionSender | null = null;
 
-function clearActiveBotTimer(): void {
-  if (activeBotCleanup) {
-    activeBotCleanup();
-    activeBotCleanup = null;
+function clearActiveAutomationTimer(): void {
+  if (activeAutomationCleanup) {
+    activeAutomationCleanup();
+    activeAutomationCleanup = null;
   }
 }
 
 export const useGameStore = create<GameStoreState>((set, get) => {
   const commitHostState = (nextHostState: HostGameState): void => {
-    clearActiveBotTimer();
+    clearActiveAutomationTimer();
 
     const { myPlayerId } = get();
     const hostView = sanitizeGameStateForPlayer(nextHostState, myPlayerId);
@@ -109,9 +117,12 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     }
 
     if (nextHostState.phase === 'PLAYING') {
-      activeBotCleanup = scheduleBotTurn(nextHostState, (botAction) => {
-        get().dispatchHostAction(botAction);
-      });
+      activeAutomationCleanup = scheduleRoundAutomation(
+        nextHostState,
+        (autoAction) => {
+          get().dispatchHostAction(autoAction);
+        }
+      );
     }
   };
 
@@ -172,7 +183,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     },
 
     initHostLobby: (roomCode, hostId, hostName) => {
-      clearActiveBotTimer();
+      clearActiveAutomationTimer();
       const lobbyState = createLobbyState(roomCode, hostId, hostName);
       const hostView = sanitizeGameStateForPlayer(lobbyState, hostId);
 
@@ -290,19 +301,28 @@ export const useGameStore = create<GameStoreState>((set, get) => {
 
       const nextState = gameReducer(hostState, action);
       if ('playerId' in action && action.playerId === myPlayerId) {
-        set({
-          selectedCard: null,
-          selectedChip: null,
-          selectedTargetCarrier: null,
-          lastActionError: null,
-        });
+        if (action.type === 'LOCK_IN_SELECTION') {
+          const defaultTarget: CarrierColor =
+            action.chip === 'RAINBOW' ? 'RED' : action.chip;
+          set({
+            selectedCard: null,
+            selectedChip: null,
+            selectedTargetCarrier: defaultTarget,
+            lastActionError: null,
+          });
+        } else {
+          set({
+            selectedTargetCarrier: null,
+            lastActionError: null,
+          });
+        }
       }
       commitHostState(nextState);
       return { valid: true };
     },
 
     initGuestSession: (roomCode, guestId, guestName) => {
-      clearActiveBotTimer();
+      clearActiveAutomationTimer();
       set({
         role: 'GUEST',
         myPlayerId: guestId,
@@ -328,6 +348,13 @@ export const useGameStore = create<GameStoreState>((set, get) => {
           prev.selectedChip !== null &&
           sanitizedState.myHand.chips.includes(prev.selectedChip);
 
+        const mySub = sanitizedState.submissions[sanitizedState.myPlayerId];
+        const nextTargetCarrier: CarrierColor | null =
+          sanitizedState.roundPhase === 'PLACEMENT' &&
+          mySub?.chip === 'RAINBOW'
+            ? prev.selectedTargetCarrier ?? 'RED'
+            : prev.selectedTargetCarrier;
+
         return {
           viewState: sanitizedState,
           roomCode: sanitizedState.roomCode,
@@ -335,20 +362,16 @@ export const useGameStore = create<GameStoreState>((set, get) => {
           connectionError: null,
           selectedCard: stillHasCard ? prev.selectedCard : null,
           selectedChip: stillHasChip ? prev.selectedChip : null,
-          selectedTargetCarrier: stillHasChip ? prev.selectedTargetCarrier : null,
+          selectedTargetCarrier: nextTargetCarrier,
         };
       });
     },
 
-    submitSelectedCombo: () => {
-      const {
-        role,
-        myPlayerId,
-        selectedCard,
-        selectedChip,
-        selectedTargetCarrier,
-        viewState,
-      } = get();
+    /**
+     * 1) SELECTION 단계: 선택한 바위 카드 1장과 색깔 칩 1개를 비밀 제출(Lock-in)
+     */
+    lockInSelection: () => {
+      const { role, myPlayerId, selectedCard, selectedChip, viewState } = get();
 
       if (!viewState || viewState.phase !== 'PLAYING') {
         const reason = 'err_NOT_PLAYING';
@@ -356,8 +379,15 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         return { valid: false, reason };
       }
 
-      if (viewState.currentTurnPlayerId !== myPlayerId) {
-        const reason = 'err_NOT_YOUR_TURN';
+      if (viewState.roundPhase !== 'SELECTION') {
+        const reason = 'err_NOT_SELECTION_PHASE';
+        set({ lastActionError: reason });
+        return { valid: false, reason };
+      }
+
+      const me = viewState.players.find((p) => p.id === myPlayerId);
+      if (me?.hasSubmittedThisRound) {
+        const reason = 'err_ALREADY_SUBMITTED';
         set({ lastActionError: reason });
         return { valid: false, reason };
       }
@@ -368,8 +398,71 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         return { valid: false, reason };
       }
 
+      if (role === 'HOST') {
+        return get().dispatchHostAction({
+          type: 'LOCK_IN_SELECTION',
+          playerId: myPlayerId,
+          card: selectedCard,
+          chip: selectedChip,
+        });
+      }
+
+      if (role === 'GUEST') {
+        if (!guestActionSender) {
+          const reason = 'err_P2P_DISCONNECTED';
+          set({ lastActionError: reason });
+          return { valid: false, reason };
+        }
+        guestActionSender({
+          type: 'LOCK_IN_SELECTION',
+          card: selectedCard,
+          chip: selectedChip,
+        });
+        const defaultTarget: CarrierColor =
+          selectedChip === 'RAINBOW' ? 'RED' : selectedChip;
+        set({
+          selectedCard: null,
+          selectedChip: null,
+          selectedTargetCarrier: defaultTarget,
+          lastActionError: null,
+        });
+        return { valid: true };
+      }
+
+      return { valid: false, reason: 'err_SESSION_NOT_INIT' };
+    },
+
+    /**
+     * 2) PLACEMENT 단계: 내 배치 차례에 큐브를 받침대에 즉시 배치
+     */
+    confirmPlacement: () => {
+      const { role, myPlayerId, selectedTargetCarrier, viewState } = get();
+
+      if (
+        !viewState ||
+        viewState.phase !== 'PLAYING' ||
+        viewState.roundPhase !== 'PLACEMENT'
+      ) {
+        const reason = 'err_NOT_YOUR_TURN';
+        set({ lastActionError: reason });
+        return { valid: false, reason };
+      }
+
+      if (viewState.currentTurnPlayerId !== myPlayerId) {
+        const reason = 'err_NOT_YOUR_TURN';
+        set({ lastActionError: reason });
+        return { valid: false, reason };
+      }
+
+      const mySub = viewState.submissions[myPlayerId];
+      if (!mySub || !mySub.chip) {
+        const reason = 'err_PLAYER_NOT_FOUND';
+        set({ lastActionError: reason });
+        return { valid: false, reason };
+      }
+
       const resolvedCarrier = resolveTargetCarrier(
-        selectedChip,
+        mySub.chip,
         selectedTargetCarrier ?? undefined
       );
       if (!resolvedCarrier) {
@@ -380,10 +473,8 @@ export const useGameStore = create<GameStoreState>((set, get) => {
 
       if (role === 'HOST') {
         return get().dispatchHostAction({
-          type: 'SUBMIT_COMBO',
+          type: 'EXECUTE_PLACEMENT',
           playerId: myPlayerId,
-          card: selectedCard,
-          chip: selectedChip,
           targetCarrier: resolvedCarrier,
         });
       }
@@ -395,27 +486,27 @@ export const useGameStore = create<GameStoreState>((set, get) => {
           return { valid: false, reason };
         }
         guestActionSender({
-          type: 'SUBMIT_COMBO',
-          card: selectedCard,
-          chip: selectedChip,
+          type: 'EXECUTE_PLACEMENT',
           targetCarrier: resolvedCarrier,
         });
-        set({
-          selectedCard: null,
-          selectedChip: null,
-          selectedTargetCarrier: null,
-          lastActionError: null,
-        });
+        set({ lastActionError: null });
         return { valid: true };
       }
 
       return { valid: false, reason: 'err_SESSION_NOT_INIT' };
     },
 
+    /**
+     * 3) PLACEMENT 단계: 내 배치 차례에 라운드당 1회 패스 선언 (역순 후배치)
+     */
     passTurn: () => {
       const { role, myPlayerId, viewState } = get();
-      if (!viewState || viewState.phase !== 'PLAYING') {
-        const reason = 'err_NOT_PLAYING';
+      if (
+        !viewState ||
+        viewState.phase !== 'PLAYING' ||
+        viewState.roundPhase !== 'PLACEMENT'
+      ) {
+        const reason = 'err_NOT_YOUR_TURN';
         set({ lastActionError: reason });
         return { valid: false, reason };
       }
@@ -448,7 +539,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     },
 
     leaveRoom: () => {
-      clearActiveBotTimer();
+      clearActiveAutomationTimer();
       set({
         role: 'NONE',
         myPlayerId: '',
