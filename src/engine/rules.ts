@@ -10,10 +10,13 @@ import type {
   GameLogEventKey,
   GameLogParams,
   HostGameState,
+  PlacementQueueItem,
   Player,
+  PlayerSubmission,
   RockCard,
   SanitizedGameState,
   SanitizedOpponent,
+  SanitizedSubmission,
   SubmittedCombo,
 } from '../types/game';
 
@@ -104,21 +107,67 @@ export function createInitialCarriers(): CarriersMap {
 }
 
 /**
- * 라운드 선플레이어 인덱스부터 시계방향(0~6)으로 7인의 턴 대기열 생성
+ * 선 플레이어(`starterSlotIndex`)를 기준으로 특정 슬롯(`slotIndex`)이 시계 방향으로 몇 번째에 위치하는지(0 ~ 6) 계산
  */
-export function buildRoundTurnQueue(
-  players: Player[],
-  starterIndex: number
-): string[] {
-  const ordered: string[] = [];
-  for (let offset = 0; offset < TOTAL_PLAYERS; offset++) {
-    const idx = (starterIndex + offset) % TOTAL_PLAYERS;
-    const target = players.find((p) => p.slotIndex === idx);
-    if (target) {
-      ordered.push(target.id);
+export function getClockwiseDistance(
+  starterSlotIndex: number,
+  targetSlotIndex: number
+): number {
+  return (targetSlotIndex - starterSlotIndex + TOTAL_PLAYERS) % TOTAL_PLAYERS;
+}
+
+/**
+ * 7명 전원의 제출(`submissions`)을 바탕으로 원작 규칙에 따라 이번 라운드 큐브 배치 순서(`PlacementQueueItem[]`)를 정렬
+ * - 1순위: `RAINBOW` 칩 제출자 최우선
+ * - 2순위: 바위 카드 숫자가 더 높은 플레이어 우선 (`6 > 5 > 4 > 3 > 2 > 1 > 0`)
+ * - 3순위(동순위 타이브레이커): 현재 라운드의 선 플레이어(`startPlayerId`)를 기준으로 시계 방향(슬롯 순환 순서)으로 앞선 플레이어 우선
+ */
+export function buildPlacementQueue(
+  players: readonly Player[],
+  submissions: Record<string, PlayerSubmission>,
+  startPlayerId: string
+): PlacementQueueItem[] {
+  const starter = players.find((p) => p.id === startPlayerId) ?? players[0];
+  const starterSlotIndex = starter ? starter.slotIndex : 0;
+
+  const rawItems = players
+    .map((p) => {
+      const sub = submissions[p.id];
+      if (!sub) return null;
+      return {
+        playerId: p.id,
+        playerName: p.name,
+        slotIndex: p.slotIndex,
+        chip: sub.chip,
+        card: sub.card,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  rawItems.sort((a, b) => {
+    // 1순위: RAINBOW 칩 우선
+    const aIsRainbow = a.chip === 'RAINBOW' ? 1 : 0;
+    const bIsRainbow = b.chip === 'RAINBOW' ? 1 : 0;
+    if (bIsRainbow !== aIsRainbow) {
+      return bIsRainbow - aIsRainbow;
     }
-  }
-  return ordered;
+
+    // 2순위: 바위 카드 숫자가 더 높은 쪽 우선 (내림차순)
+    if (b.card !== a.card) {
+      return b.card - a.card;
+    }
+
+    // 3순위: 선 플레이어 기준 시계 방향 거리 오름차순
+    const distA = getClockwiseDistance(starterSlotIndex, a.slotIndex);
+    const distB = getClockwiseDistance(starterSlotIndex, b.slotIndex);
+    return distA - distB;
+  });
+
+  return rawItems.map((item, idx) => ({
+    ...item,
+    priorityOrder: idx + 1,
+    status: 'PENDING',
+  }));
 }
 
 /**
@@ -143,6 +192,7 @@ export function createLobbyState(
           cards: createInitialCards(),
           chips: createInitialChips(),
           penaltyPoints: 0,
+          hasSubmittedThisRound: false,
           hasPassedThisRound: false,
           hasActedThisRound: false,
           isEliminated: false,
@@ -158,6 +208,7 @@ export function createLobbyState(
         cards: createInitialCards(),
         chips: createInitialChips(),
         penaltyPoints: 0,
+        hasSubmittedThisRound: false,
         hasPassedThisRound: false,
         hasActedThisRound: false,
         isEliminated: false,
@@ -168,12 +219,17 @@ export function createLobbyState(
   return {
     roomCode,
     phase: 'LOBBY',
+    roundPhase: 'SELECTION',
     round: 1,
     half: 1,
     players,
-    currentTurnPlayerId: hostId,
+    startPlayerId: hostId,
     roundStarterIndex: 0,
-    turnQueue: buildRoundTurnQueue(players, 0),
+    lastPenaltyPlayerIdInRound: null,
+    submissions: {},
+    placementQueue: [],
+    currentTurnPlayerId: '',
+    turnQueue: [],
     passedQueue: [],
     carriers: createInitialCarriers(),
     lastSubmitted: null,
@@ -243,14 +299,13 @@ export function addGuestToLobby(
     state: {
       ...state,
       players: updatedPlayers,
-      turnQueue: buildRoundTurnQueue(updatedPlayers, state.roundStarterIndex),
     },
     joined: true,
   };
 }
 
 /**
- * 게임 시작 (1라운드 개시, 전원 초기 카드 7장 및 색깔 칩 7개 지급)
+ * 게임 시작 (1라운드 SELECTION 단계 개시, 전원 초기 카드 7장 및 색깔 칩 7개 지급)
  */
 export function startGame(state: HostGameState): HostGameState {
   const players = state.players.map((p) => ({
@@ -258,24 +313,29 @@ export function startGame(state: HostGameState): HostGameState {
     cards: createInitialCards(),
     chips: createInitialChips(),
     penaltyPoints: 0,
+    hasSubmittedThisRound: false,
     hasPassedThisRound: false,
     hasActedThisRound: false,
     isEliminated: false,
   }));
 
-  const turnQueue = buildRoundTurnQueue(players, 0);
-  const firstPlayerId = turnQueue[0] ?? players[0].id;
+  const starter = players[0];
 
   return {
     ...state,
     phase: 'PLAYING',
+    roundPhase: 'SELECTION',
     round: 1,
     half: 1,
     players,
-    roundStarterIndex: 0,
-    turnQueue,
+    startPlayerId: starter.id,
+    roundStarterIndex: starter.slotIndex,
+    lastPenaltyPlayerIdInRound: null,
+    submissions: {},
+    placementQueue: [],
+    currentTurnPlayerId: '',
+    turnQueue: [],
     passedQueue: [],
-    currentTurnPlayerId: firstPlayerId,
     carriers: createInitialCarriers(),
     lastSubmitted: null,
     lastExplosion: null,
@@ -318,13 +378,19 @@ export function isChipPlayable(
 }
 
 /**
- * 현재 플레이어가 패스(Pass)를 선언할 수 있는지 검증
+ * PLACEMENT 단계에서 현재 차례인 플레이어가 패스(Pass)를 선언할 수 있는지 검증
+ * - 이번 라운드에서 아직 패스를 사용하지 않았고(`!hasPassedThisRound`)
+ * - 1차 배치 대기열(`turnQueue`)에서 자신의 차례일 때만 패스 가능 (이미 패스하여 `passedQueue`로 넘어간 역순 배치 차례에는 재패스 불가)
  */
 export function canPlayerPass(
   state: HostGameState,
   playerId: string
 ): boolean {
-  if (state.phase !== 'PLAYING' || state.currentTurnPlayerId !== playerId) {
+  if (
+    state.phase !== 'PLAYING' ||
+    state.roundPhase !== 'PLACEMENT' ||
+    state.currentTurnPlayerId !== playerId
+  ) {
     return false;
   }
   const player = state.players.find((p) => p.id === playerId);
@@ -335,7 +401,7 @@ export function canPlayerPass(
 }
 
 /**
- * 제출 액션의 유효성을 엄격히 검증 (Host-Authoritative 검증용, 에러 코드는 번역 키로 반환)
+ * 액션의 유효성을 엄격히 검증 (Host-Authoritative 검증용)
  */
 export function validateAction(
   state: HostGameState,
@@ -364,38 +430,63 @@ export function validateAction(
     return { valid: false, reason: 'err_NOT_PLAYING' };
   }
 
-  if (state.currentTurnPlayerId !== action.playerId) {
-    return { valid: false, reason: 'err_NOT_YOUR_TURN' };
-  }
-
-  const player = state.players.find((p) => p.id === action.playerId);
-  if (!player) {
-    return { valid: false, reason: 'err_PLAYER_NOT_FOUND' };
-  }
-
-  if (action.type === 'PASS_TURN') {
-    if (!canPlayerPass(state, action.playerId)) {
-      return {
-        valid: false,
-        reason: 'err_CANNOT_PASS',
-      };
+  if (action.type === 'ADVANCE_REVEAL_PHASE') {
+    if (
+      state.roundPhase !== 'REVEAL_CHIPS' &&
+      state.roundPhase !== 'REVEAL_CARDS'
+    ) {
+      return { valid: false, reason: 'err_UNKNOWN_ACTION' };
     }
     return { valid: true };
   }
 
-  if (action.type === 'SUBMIT_COMBO') {
+  if (action.type === 'LOCK_IN_SELECTION') {
+    if (state.roundPhase !== 'SELECTION') {
+      return { valid: false, reason: 'err_NOT_SELECTION_PHASE' };
+    }
+    const player = state.players.find((p) => p.id === action.playerId);
+    if (!player) {
+      return { valid: false, reason: 'err_PLAYER_NOT_FOUND' };
+    }
+    if (player.hasSubmittedThisRound) {
+      return { valid: false, reason: 'err_ALREADY_SUBMITTED' };
+    }
     if (!player.cards.includes(action.card)) {
       return { valid: false, reason: 'err_CARD_NOT_OWNED' };
     }
     if (!player.chips.includes(action.chip)) {
       return { valid: false, reason: 'err_CHIP_NOT_OWNED' };
     }
-    const targetColor = resolveTargetCarrier(action.chip, action.targetCarrier);
+    return { valid: true };
+  }
+
+  if (action.type === 'PASS_TURN') {
+    if (state.roundPhase !== 'PLACEMENT') {
+      return { valid: false, reason: 'err_NOT_YOUR_TURN' };
+    }
+    if (state.currentTurnPlayerId !== action.playerId) {
+      return { valid: false, reason: 'err_NOT_YOUR_TURN' };
+    }
+    if (!canPlayerPass(state, action.playerId)) {
+      return { valid: false, reason: 'err_CANNOT_PASS' };
+    }
+    return { valid: true };
+  }
+
+  if (action.type === 'EXECUTE_PLACEMENT') {
+    if (state.roundPhase !== 'PLACEMENT') {
+      return { valid: false, reason: 'err_NOT_YOUR_TURN' };
+    }
+    if (state.currentTurnPlayerId !== action.playerId) {
+      return { valid: false, reason: 'err_NOT_YOUR_TURN' };
+    }
+    const sub = state.submissions[action.playerId];
+    if (!sub) {
+      return { valid: false, reason: 'err_PLAYER_NOT_FOUND' };
+    }
+    const targetColor = resolveTargetCarrier(sub.chip, action.targetCarrier);
     if (!targetColor) {
-      return {
-        valid: false,
-        reason: 'err_RAINBOW_TARGET_REQUIRED',
-      };
+      return { valid: false, reason: 'err_RAINBOW_TARGET_REQUIRED' };
     }
     return { valid: true };
   }
@@ -434,46 +525,86 @@ export function determineEliminatedPlayers(
 }
 
 /**
- * 현재 라운드의 남은 턴을 계산하고, 전원 행동이 끝났다면 다음 라운드(또는 중간 정산 / 게임 종료)로 전환
+ * PLACEMENT 단계에서 한 명의 배치 또는 패스가 끝난 후 다음 배치 차례 또는 라운드 종료(ROUND_END -> 다음 라운드) 처리
+ * - 라운드 종료 시 선 플레이어 갱신 규칙:
+ *   이번 라운드에서 가장 마지막으로 벌점을 받은 플레이어(`lastPenaltyPlayerIdInRound`)가 다음 라운드의 선 플레이어(`startPlayerId`)가 된다.
+ *   아무도 벌점을 받지 않았다면 기존 `startPlayerId`를 유지한다.
  */
-function advanceTurnOrRound(
+function advancePlacementOrRound(
   state: HostGameState,
   updatedPlayers: Player[],
+  updatedPlacementQueue: PlacementQueueItem[],
   updatedTurnQueue: string[],
   updatedPassedQueue: string[],
   updatedCarriers: CarriersMap,
   lastSubmitted: SubmittedCombo | null,
   lastExplosion: ExplosionSnapshot | null,
+  lastPenaltyPlayerIdInRound: string | null,
   newLogs: GameLogEntry[]
 ): HostGameState {
+  // 1) 일반 배치 대기열(turnQueue)에 남은 플레이어가 있으면 다음 순서 진행
   if (updatedTurnQueue.length > 0) {
     return {
       ...state,
       players: updatedPlayers,
+      placementQueue: updatedPlacementQueue,
       turnQueue: updatedTurnQueue,
       passedQueue: updatedPassedQueue,
       currentTurnPlayerId: updatedTurnQueue[0],
       carriers: updatedCarriers,
       lastSubmitted,
       lastExplosion,
+      lastPenaltyPlayerIdInRound,
       logs: newLogs,
     };
   }
 
+  // 2) 일반 배치 대기열이 모두 끝났고 패스 대기열(passedQueue)에 플레이어가 남아있다면
+  // 패스를 선언한 순서의 역순(LIFO)으로 큐브 배치 진행
   if (updatedPassedQueue.length > 0) {
     return {
       ...state,
       players: updatedPlayers,
+      placementQueue: updatedPlacementQueue,
       turnQueue: [],
       passedQueue: updatedPassedQueue,
       currentTurnPlayerId: updatedPassedQueue[0],
       carriers: updatedCarriers,
       lastSubmitted,
       lastExplosion,
+      lastPenaltyPlayerIdInRound,
       logs: newLogs,
     };
   }
 
+  // 3) 7명 전원의 큐브 배치가 완료된 경우 -> 다음 라운드 선 플레이어(startPlayerId) 결정
+  const nextStartPlayerId =
+    lastPenaltyPlayerIdInRound ?? state.startPlayerId;
+  const nextStarterPlayer =
+    updatedPlayers.find((p) => p.id === nextStartPlayerId) ??
+    updatedPlayers[0];
+  const nextStarterIndex = nextStarterPlayer.slotIndex;
+
+  const logsWithStarter = [...newLogs];
+  if (
+    lastPenaltyPlayerIdInRound &&
+    lastPenaltyPlayerIdInRound !== state.startPlayerId
+  ) {
+    logsWithStarter.push(
+      createStructuredLog(
+        state.round,
+        'ROUND_START',
+        'STARTER_UPDATED',
+        {
+          playerId: nextStarterPlayer.id,
+          playerName: nextStarterPlayer.name,
+        },
+        nextStarterPlayer.id
+      )
+    );
+  }
+
+  // 7라운드 종료 직후: 중간 정산(HALF_TIME) 진입 (손패만 재지급, 받침대 돌과 합계는 그대로 유지)
   if (state.round === HALF_ROUND) {
     const halfTimeLog = createStructuredLog(
       state.round,
@@ -485,29 +616,33 @@ function advanceTurnOrRound(
       ...p,
       cards: createInitialCards(),
       chips: createInitialChips(),
+      hasSubmittedThisRound: false,
       hasPassedThisRound: false,
       hasActedThisRound: false,
     }));
 
-    const nextStarterIndex = (state.roundStarterIndex + 1) % TOTAL_PLAYERS;
-    const nextQueue = buildRoundTurnQueue(refilledPlayers, nextStarterIndex);
-
     return {
       ...state,
       phase: 'HALF_TIME',
+      roundPhase: 'ROUND_END',
       half: 2,
       players: refilledPlayers,
+      startPlayerId: nextStarterPlayer.id,
       roundStarterIndex: nextStarterIndex,
-      turnQueue: nextQueue,
+      lastPenaltyPlayerIdInRound: null,
+      submissions: {},
+      placementQueue: updatedPlacementQueue,
+      turnQueue: [],
       passedQueue: [],
-      currentTurnPlayerId: nextQueue[0] ?? refilledPlayers[0].id,
+      currentTurnPlayerId: '',
       carriers: updatedCarriers,
       lastSubmitted,
       lastExplosion,
-      logs: [...newLogs, halfTimeLog],
+      logs: [...logsWithStarter, halfTimeLog],
     };
   }
 
+  // 14라운드 종료 직후: 최종 누적 벌점 최하위 2명 탈락 판정
   if (state.round >= MAX_ROUNDS) {
     const eliminatedIds = determineEliminatedPlayers(updatedPlayers);
     const finalPlayers = updatedPlayers.map((p) => ({
@@ -534,52 +669,57 @@ function advanceTurnOrRound(
     return {
       ...state,
       phase: 'GAME_OVER',
+      roundPhase: 'ROUND_END',
       players: finalPlayers,
+      placementQueue: updatedPlacementQueue,
       turnQueue: [],
       passedQueue: [],
+      currentTurnPlayerId: '',
       carriers: updatedCarriers,
       lastSubmitted,
       lastExplosion,
       eliminatedPlayerIds: eliminatedIds,
-      logs: [...newLogs, gameOverLog],
+      logs: [...logsWithStarter, gameOverLog],
     };
   }
 
+  // 일반 다음 라운드 전환 (SELECTION 단계로 진입)
   const nextRound = state.round + 1;
-  const nextStarterIndex = (state.roundStarterIndex + 1) % TOTAL_PLAYERS;
   const resetPlayers = updatedPlayers.map((p) => ({
     ...p,
+    hasSubmittedThisRound: false,
     hasPassedThisRound: false,
     hasActedThisRound: false,
   }));
-  const nextQueue = buildRoundTurnQueue(resetPlayers, nextStarterIndex);
-  const starterPlayer = resetPlayers.find(
-    (p) => p.slotIndex === nextStarterIndex
-  );
 
   const roundLog = createStructuredLog(
     nextRound,
     'ROUND_START',
     'ROUND_STARTED',
     {
-      playerId: starterPlayer?.id,
-      playerName: starterPlayer?.name ?? 'Player',
+      playerId: nextStarterPlayer.id,
+      playerName: nextStarterPlayer.name,
     }
   );
 
   return {
     ...state,
     round: nextRound,
+    roundPhase: 'SELECTION',
     half: nextRound > HALF_ROUND ? 2 : 1,
     players: resetPlayers,
+    startPlayerId: nextStarterPlayer.id,
     roundStarterIndex: nextStarterIndex,
-    turnQueue: nextQueue,
+    lastPenaltyPlayerIdInRound: null,
+    submissions: {},
+    placementQueue: [],
+    turnQueue: [],
     passedQueue: [],
-    currentTurnPlayerId: nextQueue[0] ?? resetPlayers[0].id,
+    currentTurnPlayerId: '',
     carriers: updatedCarriers,
     lastSubmitted,
     lastExplosion,
-    logs: [...newLogs, roundLog],
+    logs: [...logsWithStarter, roundLog],
   };
 }
 
@@ -642,47 +782,152 @@ export function gameReducer(
         ...p,
         cards: createInitialCards(),
         chips: createInitialChips(),
+        hasSubmittedThisRound: false,
         hasPassedThisRound: false,
         hasActedThisRound: false,
       }));
-      const nextQueue = buildRoundTurnQueue(
-        refilledPlayers,
-        state.roundStarterIndex
-      );
-      const starterPlayer = refilledPlayers.find(
-        (p) => p.slotIndex === state.roundStarterIndex
-      );
+      const starterPlayer =
+        refilledPlayers.find((p) => p.id === state.startPlayerId) ??
+        refilledPlayers[0];
 
       const startSecondHalfLog = createStructuredLog(
         nextRound,
         'ROUND_START',
         'SECOND_HALF_STARTED',
         {
-          playerId: starterPlayer?.id,
-          playerName: starterPlayer?.name ?? 'Player',
+          playerId: starterPlayer.id,
+          playerName: starterPlayer.name,
         }
       );
 
-      // 중요: 7라운드 -> 8라운드 전환 시 손패(카드·칩)만 재지급하며,
-      // 3개 짐꾼 받침대(carriers: RED, GREEN, BLUE)에 쌓인 돌(stones)과 합계(sum)는 그대로 유지한다.
+      // 7라운드 -> 8라운드 전환 시 손패(카드·칩)만 재지급하고 받침대(carriers)는 그대로 유지
       return {
         ...state,
         phase: 'PLAYING',
+        roundPhase: 'SELECTION',
         round: nextRound,
         half: 2,
         players: refilledPlayers,
-        turnQueue: nextQueue,
+        startPlayerId: starterPlayer.id,
+        roundStarterIndex: starterPlayer.slotIndex,
+        lastPenaltyPlayerIdInRound: null,
+        submissions: {},
+        placementQueue: [],
+        turnQueue: [],
         passedQueue: [],
-        currentTurnPlayerId: nextQueue[0] ?? refilledPlayers[0].id,
+        currentTurnPlayerId: '',
         carriers: state.carriers,
         logs: [...state.logs, startSecondHalfLog],
       };
+    }
+
+    case 'LOCK_IN_SELECTION': {
+      const player = state.players.find((p) => p.id === action.playerId);
+      if (!player) return state;
+
+      // 손패에서 제출한 카드 1장과 칩 1개 차감
+      const nextCards = removeOneItem(player.cards, action.card);
+      const nextChips = removeOneItem(player.chips, action.chip);
+
+      const updatedPlayers = state.players.map((p) =>
+        p.id === player.id
+          ? {
+              ...p,
+              cards: nextCards,
+              chips: nextChips,
+              hasSubmittedThisRound: true,
+            }
+          : p
+      );
+
+      const nextSubmissions: Record<string, PlayerSubmission> = {
+        ...state.submissions,
+        [player.id]: {
+          playerId: player.id,
+          playerName: player.name,
+          chip: action.chip,
+          card: action.card,
+        },
+      };
+
+      const allSubmitted = updatedPlayers.every((p) => p.hasSubmittedThisRound);
+
+      if (!allSubmitted) {
+        return {
+          ...state,
+          players: updatedPlayers,
+          submissions: nextSubmissions,
+        };
+      }
+
+      // 7명 전원 제출 완료 -> 즉시 1차 공개(REVEAL_CHIPS: 색깔 칩 일제 공개) 단계로 전환
+      const revealChipsLog = createStructuredLog(
+        state.round,
+        'ROUND_START',
+        'CHIPS_REVEALED'
+      );
+
+      return {
+        ...state,
+        roundPhase: 'REVEAL_CHIPS',
+        players: updatedPlayers,
+        submissions: nextSubmissions,
+        logs: [...state.logs, revealChipsLog],
+      };
+    }
+
+    case 'ADVANCE_REVEAL_PHASE': {
+      if (state.roundPhase === 'REVEAL_CHIPS') {
+        // 1차 공개(칩) -> 2차 공개(REVEAL_CARDS: 바위 카드 공개 및 우선순위 배치 순서 확정)
+        const sortedQueue = buildPlacementQueue(
+          state.players,
+          state.submissions,
+          state.startPlayerId
+        );
+        const revealCardsLog = createStructuredLog(
+          state.round,
+          'ROUND_START',
+          'CARDS_REVEALED'
+        );
+
+        return {
+          ...state,
+          roundPhase: 'REVEAL_CARDS',
+          placementQueue: sortedQueue,
+          logs: [...state.logs, revealCardsLog],
+        };
+      }
+
+      if (state.roundPhase === 'REVEAL_CARDS') {
+        // 2차 공개(카드) -> 순차 배치 및 패스 단계(PLACEMENT) 진입
+        const sortedQueue =
+          state.placementQueue.length > 0
+            ? state.placementQueue
+            : buildPlacementQueue(
+                state.players,
+                state.submissions,
+                state.startPlayerId
+              );
+        const turnOrderIds = sortedQueue.map((item) => item.playerId);
+
+        return {
+          ...state,
+          roundPhase: 'PLACEMENT',
+          placementQueue: sortedQueue,
+          turnQueue: turnOrderIds,
+          passedQueue: [],
+          currentTurnPlayerId: turnOrderIds[0] ?? '',
+        };
+      }
+
+      return state;
     }
 
     case 'PASS_TURN': {
       const player = state.players.find((p) => p.id === action.playerId);
       if (!player) return state;
 
+      // 1차 대기열(turnQueue)에서 제거하고 패스 대기열(passedQueue)의 맨 앞(LIFO 역순 배치)에 추가
       const remainingTurnQueue = state.turnQueue.filter(
         (id) => id !== action.playerId
       );
@@ -690,6 +935,12 @@ export function gameReducer(
 
       const updatedPlayers = state.players.map((p) =>
         p.id === action.playerId ? { ...p, hasPassedThisRound: true } : p
+      );
+
+      const updatedPlacementQueue = state.placementQueue.map((item) =>
+        item.playerId === action.playerId
+          ? { ...item, status: 'PASSED' as const }
+          : item
       );
 
       const passLog = createStructuredLog(
@@ -703,54 +954,59 @@ export function gameReducer(
         player.id
       );
 
-      return advanceTurnOrRound(
+      return advancePlacementOrRound(
         state,
         updatedPlayers,
+        updatedPlacementQueue,
         remainingTurnQueue,
         updatedPassedQueue,
         state.carriers,
         state.lastSubmitted,
         state.lastExplosion,
+        state.lastPenaltyPlayerIdInRound,
         [...state.logs, passLog]
       );
     }
 
-    case 'SUBMIT_COMBO': {
+    case 'EXECUTE_PLACEMENT': {
       const player = state.players.find((p) => p.id === action.playerId);
-      if (!player) return state;
+      const submission = state.submissions[action.playerId];
+      if (!player || !submission) return state;
 
       const targetColor = resolveTargetCarrier(
-        action.chip,
+        submission.chip,
         action.targetCarrier
       );
       if (!targetColor) return state;
 
-      const nextCards = removeOneItem(player.cards, action.card);
-      const nextChips = removeOneItem(player.chips, action.chip);
-
       const currentPillar = state.carriers[targetColor];
+      const previousStones = currentPillar.stones;
       const previousSum = currentPillar.sum;
-      const newSum = previousSum + action.card;
+      const newSum = previousSum + submission.card;
       const isExplosion = newSum >= EXPLOSION_THRESHOLD;
 
       const newStone: CarrierStone = {
         id: `stone-${state.round}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        value: action.card,
+        value: submission.card,
         playerId: player.id,
         playerName: player.name,
-        chipColor: action.chip,
+        chipColor: submission.chip,
       };
 
-      const stonesBeforeReset = [...currentPillar.stones, newStone];
-      const penaltyAdded = isExplosion
-        ? Math.max(1, stonesBeforeReset.length)
-        : 0;
+      // [원작 핵심 13 폭발 및 수거 규칙]
+      // - 합계가 13 이상이 되면: 방금 배치한 큐브를 제외한, 배치 직전까지 놓여 있었던 기존 바위 큐브들을 모두 수거한다.
+      // - 해당 플레이어는 수거된 기존 바위 큐브의 개수(previousStones.length)만큼 벌점을 받는다.
+      // - 방금 배치하여 13을 넘긴 새로운 바위 큐브 1개만 해당 받침대의 1층 첫 번째 칸에 남고,
+      //   받침대의 현재 합계(sum)는 그 큐브의 숫자 값(submission.card)으로 갱신된다.
+      const collectedCount = isExplosion ? previousStones.length : 0;
+      const penaltyAdded = collectedCount;
+      const newBaseSum = isExplosion ? submission.card : newSum;
 
       const submittedCombo: SubmittedCombo = {
         playerId: player.id,
         playerName: player.name,
-        card: action.card,
-        chip: action.chip,
+        card: submission.card,
+        chip: submission.chip,
         targetCarrier: targetColor,
         round: state.round,
         causedExplosion: isExplosion,
@@ -763,9 +1019,12 @@ export function gameReducer(
             playerId: player.id,
             playerName: player.name,
             finalSum: newSum,
+            newBaseSum: submission.card,
             penaltyAdded,
             round: state.round,
-            explodedStones: stonesBeforeReset,
+            explodedStones: [...previousStones, newStone],
+            collectedCount,
+            remainingStone: newStone,
             timestamp: Date.now(),
           }
         : state.lastExplosion;
@@ -773,15 +1032,15 @@ export function gameReducer(
       const updatedPillar = isExplosion
         ? {
             color: targetColor,
-            stones: [],
-            sum: 0,
-            lastChipColor: null,
+            stones: [newStone], // 새로운 바위 큐브 1개만 받침대 1층 첫 칸에 잔류
+            sum: submission.card, // 현재 합계는 방금 올린 큐브 숫자 값으로 갱신
+            lastChipColor: submission.chip,
           }
         : {
             color: targetColor,
-            stones: stonesBeforeReset,
+            stones: [...previousStones, newStone],
             sum: newSum,
-            lastChipColor: action.chip,
+            lastChipColor: submission.chip,
           };
 
       const nextCarriers: CarriersMap = {
@@ -793,12 +1052,20 @@ export function gameReducer(
         p.id === player.id
           ? {
               ...p,
-              cards: nextCards,
-              chips: nextChips,
               penaltyPoints: p.penaltyPoints + penaltyAdded,
               hasActedThisRound: true,
             }
           : p
+      );
+
+      const updatedPlacementQueue = state.placementQueue.map((item) =>
+        item.playerId === player.id
+          ? {
+              ...item,
+              status: 'PLACED' as const,
+              placedCarrier: targetColor,
+            }
+          : item
       );
 
       const remainingTurnQueue = state.turnQueue.filter(
@@ -808,16 +1075,22 @@ export function gameReducer(
         (id) => id !== player.id
       );
 
+      // 이번 라운드에서 가장 마지막으로 벌점을 받은 플레이어 ID 기록 (다음 라운드 선 플레이어)
+      const nextLastPenaltyPlayerId =
+        isExplosion && penaltyAdded > 0
+          ? player.id
+          : state.lastPenaltyPlayerIdInRound;
+
       const actionLogs: GameLogEntry[] = [
         createStructuredLog(
           state.round,
           'SUBMIT',
-          action.chip === 'RAINBOW' ? 'SUBMIT_RAINBOW' : 'SUBMIT_NORMAL',
+          submission.chip === 'RAINBOW' ? 'SUBMIT_RAINBOW' : 'SUBMIT_NORMAL',
           {
             playerId: player.id,
             playerName: player.name,
-            card: action.card,
-            chip: action.chip,
+            card: submission.card,
+            chip: submission.chip,
             targetCarrier: targetColor,
             previousSum,
             newSum,
@@ -837,21 +1110,25 @@ export function gameReducer(
               playerName: player.name,
               targetCarrier: targetColor,
               newSum,
+              newBaseSum,
               penaltyAdded,
+              collectedCount,
             },
             player.id
           )
         );
       }
 
-      return advanceTurnOrRound(
+      return advancePlacementOrRound(
         state,
         updatedPlayers,
+        updatedPlacementQueue,
         remainingTurnQueue,
         remainingPassedQueue,
         nextCarriers,
         submittedCombo,
         nextExplosion,
+        nextLastPenaltyPlayerId,
         [...state.logs, ...actionLogs]
       );
     }
@@ -860,6 +1137,9 @@ export function gameReducer(
 
 /**
  * 치팅 방지 직렬화(Sanitization) 함수
+ * - SELECTION 단계에서는 타인의 제출 카드/칩을 모두 null로 마스킹(`hasSubmitted: true`만 공개)
+ * - REVEAL_CHIPS 단계에서는 전원의 `chip`만 공개하고 타인의 `card`는 null로 마스킹, `placementQueue`도 아직 비공개
+ * - REVEAL_CARDS / PLACEMENT / ROUND_END 단계에서는 `chip`, `card`, `placementQueue` 전체 공개
  */
 export function sanitizeGameStateForPlayer(
   state: HostGameState,
@@ -877,10 +1157,49 @@ export function sanitizeGameStateForPlayer(
     remainingCards: p.cards.length,
     remainingChips: p.chips.length,
     penaltyPoints: p.penaltyPoints,
+    hasSubmittedThisRound: p.hasSubmittedThisRound,
     hasPassedThisRound: p.hasPassedThisRound,
     hasActedThisRound: p.hasActedThisRound,
     isEliminated: p.isEliminated,
   }));
+
+  const canSeeChips =
+    state.roundPhase === 'REVEAL_CHIPS' ||
+    state.roundPhase === 'REVEAL_CARDS' ||
+    state.roundPhase === 'PLACEMENT' ||
+    state.roundPhase === 'ROUND_END';
+
+  const canSeeCards =
+    state.roundPhase === 'REVEAL_CARDS' ||
+    state.roundPhase === 'PLACEMENT' ||
+    state.roundPhase === 'ROUND_END';
+
+  const sanitizedSubmissions: Record<string, SanitizedSubmission> = {};
+  for (const p of state.players) {
+    const rawSub = state.submissions[p.id];
+    const isMe = p.id === targetPlayerId;
+    if (!rawSub) {
+      sanitizedSubmissions[p.id] = {
+        playerId: p.id,
+        playerName: p.name,
+        hasSubmitted: false,
+        chip: null,
+        card: null,
+      };
+    } else {
+      sanitizedSubmissions[p.id] = {
+        playerId: p.id,
+        playerName: p.name,
+        hasSubmitted: true,
+        chip: isMe || canSeeChips ? rawSub.chip : null,
+        card: isMe || canSeeCards ? rawSub.card : null,
+      };
+    }
+  }
+
+  const sanitizedPlacementQueue: PlacementQueueItem[] = canSeeCards
+    ? state.placementQueue.map((item) => ({ ...item }))
+    : [];
 
   const clonedCarriers: CarriersMap = {
     RED: {
@@ -900,6 +1219,7 @@ export function sanitizeGameStateForPlayer(
   return {
     roomCode: state.roomCode,
     phase: state.phase,
+    roundPhase: state.roundPhase,
     round: state.round,
     half: state.half,
     myPlayerId: targetPlayerId,
@@ -908,8 +1228,13 @@ export function sanitizeGameStateForPlayer(
       chips: me ? [...me.chips] : [],
     },
     players: sanitizedPlayers,
-    currentTurnPlayerId: state.currentTurnPlayerId,
+    startPlayerId: state.startPlayerId,
     roundStarterIndex: state.roundStarterIndex,
+    submissions: sanitizedSubmissions,
+    placementQueue: sanitizedPlacementQueue,
+    currentTurnPlayerId: state.currentTurnPlayerId,
+    turnQueue: [...state.turnQueue],
+    passedQueue: [...state.passedQueue],
     carriers: clonedCarriers,
     lastSubmitted: state.lastSubmitted ? { ...state.lastSubmitted } : null,
     lastExplosion: state.lastExplosion
@@ -918,6 +1243,7 @@ export function sanitizeGameStateForPlayer(
           explodedStones: state.lastExplosion.explodedStones.map((s) => ({
             ...s,
           })),
+          remainingStone: { ...state.lastExplosion.remainingStone },
         }
       : null,
     eliminatedPlayerIds: [...state.eliminatedPlayerIds],

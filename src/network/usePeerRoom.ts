@@ -62,6 +62,7 @@ export function isPeerMessage(data: unknown): data is PeerMessage {
         isObjectRecord(data.state) &&
         typeof data.state.roomCode === 'string' &&
         typeof data.state.phase === 'string' &&
+        typeof data.state.roundPhase === 'string' &&
         Array.isArray(data.state.players) &&
         isObjectRecord(data.state.carriers)
       );
@@ -73,14 +74,15 @@ export function isPeerMessage(data: unknown): data is PeerMessage {
       if (data.action.type === 'PASS_TURN') {
         return true;
       }
-      if (data.action.type === 'SUBMIT_COMBO') {
-        const hasValidTarget =
-          data.action.targetCarrier === undefined ||
-          isValidCarrierColor(data.action.targetCarrier);
+      if (data.action.type === 'LOCK_IN_SELECTION') {
         return (
-          isValidRockCard(data.action.card) &&
-          isValidChipColor(data.action.chip) &&
-          hasValidTarget
+          isValidRockCard(data.action.card) && isValidChipColor(data.action.chip)
+        );
+      }
+      if (data.action.type === 'EXECUTE_PLACEMENT') {
+        return (
+          data.action.targetCarrier === undefined ||
+          isValidCarrierColor(data.action.targetCarrier)
         );
       }
       return false;
@@ -235,9 +237,12 @@ export function usePeerRoom(): UsePeerRoomReturn {
     (
       action:
         | {
-            type: 'SUBMIT_COMBO';
+            type: 'LOCK_IN_SELECTION';
             card: RockCard;
             chip: ChipColor;
+          }
+        | {
+            type: 'EXECUTE_PLACEMENT';
             targetCarrier?: CarrierColor;
           }
         | { type: 'PASS_TURN' }
@@ -372,10 +377,35 @@ export function usePeerRoom(): UsePeerRoomReturn {
             }
 
             const currentHostState = store.hostState;
-            if (
-              !currentHostState ||
-              currentHostState.currentTurnPlayerId !== verifiedSenderId
-            ) {
+            if (!currentHostState) {
+              const rejectMsg: PeerMessage = {
+                type: 'ACTION_REJECTED',
+                reason: 'err_NO_HOST_SESSION',
+              };
+              conn.send(rejectMsg);
+              return;
+            }
+
+            if (rawData.action.type === 'LOCK_IN_SELECTION') {
+              const result = store.dispatchHostAction({
+                type: 'LOCK_IN_SELECTION',
+                playerId: verifiedSenderId,
+                card: rawData.action.card,
+                chip: rawData.action.chip,
+              });
+
+              if (!result.valid) {
+                const rejectMsg: PeerMessage = {
+                  type: 'ACTION_REJECTED',
+                  reason: result.reason ?? 'err_UNKNOWN_ACTION',
+                };
+                conn.send(rejectMsg);
+              }
+              return;
+            }
+
+            // PLACEMENT 단계 액션(EXECUTE_PLACEMENT / PASS_TURN)은 현재 차례인 플레이어만 수행 가능
+            if (currentHostState.currentTurnPlayerId !== verifiedSenderId) {
               const rejectMsg: PeerMessage = {
                 type: 'ACTION_REJECTED',
                 reason: 'err_NOT_YOUR_TURN',
@@ -391,10 +421,8 @@ export function usePeerRoom(): UsePeerRoomReturn {
                     playerId: verifiedSenderId,
                   })
                 : store.dispatchHostAction({
-                    type: 'SUBMIT_COMBO',
+                    type: 'EXECUTE_PLACEMENT',
                     playerId: verifiedSenderId,
-                    card: rawData.action.card,
-                    chip: rawData.action.chip,
                     targetCarrier: rawData.action.targetCarrier,
                   });
 

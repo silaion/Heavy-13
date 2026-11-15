@@ -7,12 +7,18 @@ import {
   formatErrorMessage,
   formatGameLogEntry,
   formatPlayerDisplayName,
+  formatRoundPhaseTitle,
   LANGUAGE_STORAGE_KEY,
   translate,
   type Language,
   type TranslationKey,
 } from './translations';
-import type { CarrierColor, ChipColor, GameLogEntry } from '../types/game';
+import type {
+  CarrierColor,
+  ChipColor,
+  GameLogEntry,
+  RoundPhase,
+} from '../types/game';
 
 interface I18nStoreState {
   language: Language;
@@ -61,6 +67,11 @@ export function useTranslation() {
   const tError = (rawError: string | null): string | null =>
     formatErrorMessage(language, rawError);
 
+  const tPhaseTitle = (
+    roundPhase: RoundPhase,
+    isPassedTurnOrder: boolean
+  ): string => formatRoundPhaseTitle(language, roundPhase, isPassedTurnOrder);
+
   return {
     language,
     setLanguage,
@@ -70,5 +81,6 @@ export function useTranslation() {
     tPlayerName,
     tLog,
     tError,
+    tPhaseTitle,
   };
 }
