@@ -868,7 +868,15 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
 
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
               {[...players]
-                .sort((a, b) => a.penaltyPoints - b.penaltyPoints)
+                .sort((a, b) => {
+                  const aElim = eliminatedPlayerIds.includes(a.id) ? 1 : 0;
+                  const bElim = eliminatedPlayerIds.includes(b.id) ? 1 : 0;
+                  if (aElim !== bElim) return aElim - bElim;
+                  if (a.penaltyPoints !== b.penaltyPoints) {
+                    return a.penaltyPoints - b.penaltyPoints;
+                  }
+                  return a.slotIndex - b.slotIndex;
+                })
                 .map((p, idx) => {
                   const isEliminated = eliminatedPlayerIds.includes(p.id);
                   return (

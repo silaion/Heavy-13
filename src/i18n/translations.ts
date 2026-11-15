@@ -216,11 +216,6 @@ const ko = {
   passTurnBtn: '패스하기 (뒤로 미루기 · 1회)',
   placeNowBtnActive: '[{carrier}] 받침대에 돌 [{card}] 바로 배치하기',
   placeNowBtnSelectTarget: '배치할 대상 받침대(빨강·초록·파랑)를 선택하세요',
-  submitComboBtnActive: '[{carrier}] 받침대에 바위 [{card}] ({chip}) 제출',
-  submitComboBtnDisabled: '제출할 바위 카드와 색깔 칩을 선택하세요',
-  myTurnPrompt:
-    '나의 턴 — 제출할 바위 카드(0~6) 1장과 색깔 칩 1개를 선택하세요',
-  otherTurnPrompt: '다른 플레이어의 턴이 진행 중입니다 (내 손패 미리보기)',
 
   // Validation & Error Codes
   err_ALREADY_PLAYING: '이미 진행 중인 게임에는 신규 입장할 수 없습니다.',
@@ -320,7 +315,7 @@ const ko = {
   ruleSec2Step3Priority3:
     '3순위: 위 조건이 같으면 현재 선 플레이어(👑) 기준 시계 방향으로 순서를 결정합니다.',
   ruleSec2StarterTip:
-    '※ 해당 라운드에서 가장 마지막으로 벌점을 받은 플레이어가 다음 라운드의 선 플레이어(👑)가 됩니다.',
+    '※ 해당 라운드에서 가장 마지막으로 벌점을 받은 플레이어가 다음 라운드의 선 플레이어(👑)가 됩니다. (벌점을 받은 플레이어가 없으면 기존 선 플레이어가 유지됩니다.)',
 
   ruleSec3Title: '3. 큐브 배치 · 패스(Pass) · 13 폭발 정산',
   ruleSec3PlaceLabel: '큐브 배치',
@@ -328,10 +323,10 @@ const ko = {
     '자신의 차례에 제출한 칩 색상(RED, GREEN, BLUE) 받침대에 바위 큐브를 올립니다. RAINBOW 칩은 원하는 색 받침대를 자유롭게 선택합니다.',
   ruleSec3PassLabel: '패스 규칙 (라운드당 1회 · 역순 후배치)',
   ruleSec3PassDesc:
-    '자신의 배치 차례에 1회 패스할 수 있습니다. 패스한 플레이어들은 일반 배치가 모두 끝난 뒤, 패스를 선언한 순서의 역순(마지막에 패스한 사람부터)으로 큐브를 배치합니다.',
+    '자신의 1차 배치 차례에 라운드당 1회 패스할 수 있습니다. 패스한 플레이어들은 일반 배치가 모두 끝난 뒤, 패스를 선언한 순서의 역순(LIFO: 마지막에 패스한 사람부터)으로 큐브를 배치합니다. (패스 후 돌아온 역순 배치 차례에는 재패스가 불가능하며 반드시 배치해야 합니다.)',
   ruleSec3OverloadLabel: '13 이상 폭발 및 벌점 (핵심)',
   ruleSec3OverloadDesc:
-    '큐브를 올려 특정 받침대 합계가 13 이상이 되면, 방금 올린 큐브를 제외한 기존 큐브들이 모두 수거되며 그 수거된 큐브 개수만큼 벌점을 획득합니다. (방금 올린 큐브 1개만 받침대에 남음)',
+    '큐브를 올려 특정 받침대 합계가 13 이상이 되면, 방금 올린 큐브를 제외한 기존 큐브들이 모두 수거되며 그 수거된 기존 큐브 개수만큼 벌점을 획득합니다. 방금 올린 신규 큐브 1개만 해당 받침대에 남고, 받침대 합계는 그 큐브의 숫자 값으로 갱신됩니다.',
   ruleSec3OverloadExample:
     '예시: 기존 큐브 3개(합 11)가 쌓인 받침대에 [4]를 올리면 합계 15(≥13) 폭발! 기존 큐브 3개가 수거되어 벌점 +3점을 받고, 받침대에는 방금 올린 [4](합 4)만 남습니다.',
 
@@ -562,11 +557,6 @@ const en: TranslationSchema = {
   passTurnBtn: 'Pass (Defer in Reverse Order · 1/Round)',
   placeNowBtnActive: 'Place Stone [{card}] on [{carrier}] Carrier Now',
   placeNowBtnSelectTarget: 'Select a target Carrier (Red, Green, or Blue)',
-  submitComboBtnActive: 'Submit Stone [{card}] to [{carrier}] Carrier ({chip})',
-  submitComboBtnDisabled: 'Select a Stone Card and a Color Chip to submit',
-  myTurnPrompt:
-    'Your Turn — Select 1 Stone Card (0–6) and 1 Color Chip to submit',
-  otherTurnPrompt: "Another player's turn is in progress (Hand Preview)",
 
   // Validation & Error Codes
   err_ALREADY_PLAYING: 'Cannot join a match that is already in progress.',
@@ -665,7 +655,7 @@ const en: TranslationSchema = {
   ruleSec2Step3Priority3:
     '3rd Priority (Tie-breaker): Clockwise order starting from the current First Player (👑).',
   ruleSec2StarterTip:
-    '※ The last player to receive penalty points in a round becomes the First Player (👑) for the next round.',
+    '※ The last player to receive penalty points in a round becomes the First Player (👑) for the next round. (If no one takes penalty points, the current First Player stays unchanged.)',
 
   ruleSec3Title: '3. Cube Placement, Pass, & 13+ Overload',
   ruleSec3PlaceLabel: 'Cube Placement',
@@ -673,10 +663,10 @@ const en: TranslationSchema = {
     'On your turn, place your Stone Cube on the Carrier matching your submitted chip (RED, GREEN, BLUE). A RAINBOW chip lets you choose any of the 3 Carriers.',
   ruleSec3PassLabel: 'Pass Rule (Once per Round · Reverse Order)',
   ruleSec3PassDesc:
-    'On your placement turn, you may declare a Pass once per round. Passed players place their cubes after all regular turns finish, in reverse order of passing (last to pass places first — LIFO).',
+    'On your regular placement turn, you may declare a Pass once per round. Passed players place their cubes after all regular turns finish, in reverse order of passing (last to pass places first — LIFO). You cannot pass again on your deferred LIFO turn.',
   ruleSec3OverloadLabel: '13+ Overload & Penalty (Core Rule)',
   ruleSec3OverloadDesc:
-    'If placing your cube makes a Carrier sum reach 13 or higher, all previously stacked cubes on that Carrier (excluding the one just placed) are collected, and you take penalty points equal to the number of collected cubes. Only your newly placed cube remains on the Carrier.',
+    'If placing your cube makes a Carrier sum reach 13 or higher, all previously stacked cubes on that Carrier (excluding the one just placed) are collected, and you take penalty points equal to the number of collected cubes. Only your newly placed cube remains on the Carrier, and the Carrier sum updates to that cube’s number.',
   ruleSec3OverloadExample:
     'Example: Placing [4] on a Carrier with 3 existing cubes (sum 11) reaches 15 (≥13)! The 3 previous cubes are collected for +3 penalty pts, leaving only the new [4] cube (sum 4).',
 
@@ -904,11 +894,6 @@ const ja: TranslationSchema = {
   passTurnBtn: 'パスする（逆順後回し・1回）',
   placeNowBtnActive: '[{carrier}] 台座に石 [{card}] を今すぐ配置する',
   placeNowBtnSelectTarget: '配置する対象の台座（赤・緑・青）を選択してください',
-  submitComboBtnActive: '[{carrier}] 台座に石 [{card}] ({chip}) を提出',
-  submitComboBtnDisabled: '提出する石カードとカラーチップを選択してください',
-  myTurnPrompt:
-    'あなたのターン — 提出する石カード(0〜6)1枚とカラーチップ1個を選択してください',
-  otherTurnPrompt: '他プレイヤーのターン進行中（自分の手札プレビュー）',
 
   // Validation & Error Codes
   err_ALREADY_PLAYING: 'すでに進行中のゲームには途中参加できません。',
@@ -1007,7 +992,7 @@ const ja: TranslationSchema = {
   ruleSec2Step3Priority3:
     '第3優先: 同条件の場合は現在の先手プレイヤー(👑)から時計回りの順になります。',
   ruleSec2StarterTip:
-    '※ そのラウンドで最後に罰点を受けたプレイヤーが、次ラウンドの先手プレイヤー(👑)になります。',
+    '※ そのラウンドで最後に罰点を受けたプレイヤーが、次ラウンドの先手プレイヤー(👑)になります。（罰点を受けた人がいなければ現在の先手プレイヤーが維持されます。）',
 
   ruleSec3Title: '3. キューブ配置・パス(Pass)・13オーバー精算',
   ruleSec3PlaceLabel: 'キューブ配置',
@@ -1015,10 +1000,10 @@ const ja: TranslationSchema = {
     '自分の手番で提出したチップの色(RED, GREEN, BLUE)の台座に石キューブを載せます。RAINBOWチップは好きな色の台座を自由に選べます。',
   ruleSec3PassLabel: 'パスルール (ラウンド1回 · 逆順後配置)',
   ruleSec3PassDesc:
-    '配置手番でラウンドにつき1回パスできます。パスしたプレイヤーは通常配置がすべて終わった後、パスを宣言した順の逆順（最後にパスした人からLIFO）で配置します。',
+    '通常の配置手番でラウンドにつき1回パスできます。パスしたプレイヤーは通常配置がすべて終わった後、パスを宣言した順の逆順（最後にパスした人からLIFO）で配置します。（パス後に回ってきた逆順手番では再パスできず、必ず配置しなければなりません。）',
   ruleSec3OverloadLabel: '13以上の爆発と罰点 (核心ルール)',
   ruleSec3OverloadDesc:
-    'キューブを載せて特定の台座の合計が13以上になると、今載せたキューブを除く既存のキューブがすべて回収され、回収された個数分の罰点を受けます。（今載せた新しいキューブ1個だけが台座に残ります）',
+    'キューブを載せて特定の台座の合計が13以上になると、今載せたキューブを除く既存のキューブがすべて回収され、回収された個数分の罰点を受けます。今載せた新しいキューブ1個だけが台座に残り、台座の合計はそのキューブの数字に更新されます。',
   ruleSec3OverloadExample:
     '例: 既存の石3個(合計11)が積まれた台座に[4]を載せると合計15(≥13)で爆発！既存の石3個が回収されて罰点+3点となり、台座には新しい石[4](合計4)だけが残ります。',
 
