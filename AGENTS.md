@@ -1,53 +1,85 @@
-# Role & Objective
-너는 분산 실시간 멀티플레이 웹 게임 및 TypeScript 상태 기계(State Machine) 설계 전문 수석 아키텍트야.
-넷플릭스 <데블스 플랜: 데드 어게인>의 **<무거운 13(Heavy 13)>**을 **No-DB, 브라우저 간 WebRTC P2P(Host-Authoritative Star 토폴로지)** 기반의 반응형 웹 애플리케이션으로 설계하고 구현해 줘.
-최종 배포 대상은 **Cloudflare Pages(정적 호스팅)**이므로 서버 측 코드(SSR, API Routes, 외부 DB)는 일절 배제한다.
+# AGENTS.md — 무거운 13 (Heavy 13)
 
-# Tech Stack
-- **Core:** Vite + React 19 + TypeScript (Strict Mode, `any` 사용 금지)
-- **Styling:** Tailwind CSS (모바일 세로 뷰포트 및 데스크톱 가로 뷰포트 반응형 레이아웃)
-- **P2P Transport:** `peerjs` (WebRTC DataChannel JSON 프로토콜)
-- **State Management:** `zustand`
-- **Icons:** `lucide-react`
+## 1. 프로젝트 개요 및 목적
+- **프로젝트명:** 무거운 13 (Heavy 13 / ヘビー13)
+- **성격:** 넷플릭스 예능 <데블스 플랜: 데드 어게인>의 게임 메커니즘에서 영감을 받아 제작한 **비상업적 개인 팬 프로젝트(Fan-made Web Board Game)**
+- **배포 타겟:** Cloudflare Pages (100% 정적 호스팅, 백엔드 서버/DB 없음)
+- **핵심 아키텍처:** Host-Authoritative Star 토폴로지 기반 브라우저 간 WebRTC P2P (`PeerJS`) + 방장(Host) 로컬 실행 휴리스틱 AI 봇
 
-# Domain Rules & Edge Cases (무거운 13 핵심 명세)
-1. **7인 슬롯 및 하이브리드 봇 구성:**
-   - 게임은 항상 7인(인간 플레이어 1~7명 + 부족한 인원만큼의 로컬 AI 봇)으로 진행된다.
-   - 봇은 별도 네트워크 연결 없이 Host 브라우저의 게임 엔진 내부에서 동작한다.
-2. **라운드 및 자원 사이클 (총 14라운드):**
-   - **전반부 (1~7라운드):** 시작 시 전원에게 바위 카드 7장(`0, 1, 2, 3, 4, 5, 6`)과 색깔 칩 7개(`RED` x2, `GREEN` x2, `BLUE` x2, `RAINBOW` x1) 지급.
-   - **중간 정산 (7라운드 종료 직후):** 남아있는 패를 모두 회수하고, 후반부 시작 시 전원에게 초기 자원(카드 7장, 칩 7개)을 전량 재지급.
-   - **후반부 (8~14라운드):** 동일 규칙 진행 후 최종 누적 벌점 최하위 2명 탈락 판정.
-3. **짐꾼 받침대(Carrier) & 13 폭발 판정:**
-   - 받침대 합계(`currentSum`)는 0에서 시작하며, 턴마다 플레이어는 카드 1장과 칩 1개를 조합해 제출하거나 규칙에 따라 패스한다.
-   - 제출 직후 `currentSum >= 13`이 성립하면 해당 턴 플레이어에게 벌점을 부과하고 받침대 합계를 `0`으로 리셋한다.
+---
 
-# Architectural & Concurrency Constraints (Argon 추론 집중 영역)
-1. **Strict Host-Authoritative State Machine (`src/engine/`):**
-   - 모든 상태 변경은 순수 함수 리듀서 패턴으로 작성하여 예측 가능성을 보장하라.
-   - **치팅 방지 직렬화(Sanitization):** Host가 Guest에게 상태를 브로드캐스트할 때, 각 Guest에게는 오직 **본인의 실제 카드/칩 배열**만 전달하고 타 플레이어 및 봇의 패는 `remainingCards: number`, `remainingChips: number`로 마스킹된 뷰 모델(`SanitizedGameState`)을 생성해 전송하라.
-2. **P2P 안정성 및 장애 복구 (`src/network/usePeerRoom.ts`):**
-   - Guest가 보낸 액션 패킷은 반드시 Host에서 `currentTurnPlayerId === senderId` 및 패 보유 여부를 재검증한 후 승인한다.
-   - 게임 도중 Guest의 DataChannel `close` 또는 `error` 이벤트가 발생하면, 즉시 해당 플레이어 슬롯을 `isBot: true`로 핫스왑(Hot-swap)하여 턴이 멈추지 않고 완주되도록 처리하라.
-   - 모바일 브라우저 화면 꺼짐 방지를 위해 게임 진행 중 `navigator.wakeLock.request('screen')`을 안전하게 적용하라.
-3. **휴리스틱 AI 봇 엔진 (`src/engine/botAI.ts`):**
-   - 봇 턴 진입 시 `800ms ~ 1500ms` 사이의 비동기 지연 후 액션을 디스패치하되, 컴포넌트 언마운트나 게임 리셋 시 타이머가 누수되지 않도록 클린업 구조를 갖춰라.
-   - `currentSum` 구간별 전략(안전 구간 고숫자 소모, 위험 구간 패스 우선, 패스 불가 시 최고 숫자 털어내기)과 약 20%의 비최적수(실수) 확률을 조합해 구현하라.
+## 2. 기술 스택 (Tech Stack)
+- **Core:** React 19, TypeScript (Strict Mode), Vite
+- **Styling & Icons:** Tailwind CSS, Lucide React
+- **State Management:** Zustand (`src/store/useGameStore.ts`)
+- **Networking:** PeerJS (`src/network/usePeerRoom.ts`)
+- **Audio & Security:** Browser Native Web Audio API (`src/utils/soundEffects.ts`), Web Crypto API SHA-256 (`src/utils/cryptoAuth.ts`)
+- **Localization:** 내장 타입 안전 번역 딕셔너리 (`src/i18n/translations.ts` — `ko`, `en`, `ja`)
 
-# Project Structure
+---
+
+## 3. 디렉토리 구조 및 책임 경계
 ```text
 src/
-├── types/
-│   └── game.ts          # 도메인 엔티티, P2P 메시지 유니온 타입, Sanitized 뷰 모델
-├── engine/
-│   ├── rules.ts         # 순수 함수 기반 룰 엔진, 13 판정, 라운드 전환, 상태 마스킹 함수
-│   └── botAI.ts         # 휴리스틱 AI 봇 의사결정 알고리즘
-├── network/
-│   └── usePeerRoom.ts   # PeerJS 생명주기, Host/Guest 핸드셰이크, 단절 시 봇 전환 로직
-├── store/
-│   └── useGameStore.ts  # Zustand 스토어 (Host 엔진 구동 및 Guest 뷰 동기화)
 ├── components/
-│   ├── Lobby.tsx        # 방 생성(원클릭 초대 링크/코드 복사), 입장, 봇 슬롯 미리보기
-│   ├── GameBoard.tsx    # 중앙 짐꾼 받침대(위험도 시각화 게이지), 7인 원형/그리드 현황판
-│   └── PlayerHand.tsx   # 하단 바위 카드(0~6) 및 색깔 칩 선택·제출 터치 컨트롤러
-└── App.tsx
+│   ├── PasswordGate.tsx      # SHA-256 해시 기반 입장 게이트 (URL 쿼리 ?room= 보존 필수)
+│   ├── Lobby.tsx             # 방 생성/입장, 닉네임 설정, 초대 링크 공유
+│   ├── GameBoard.tsx         # 상단 헤더, 2줄 카드형 7인 현황판, 중앙 3색 짐꾼 받침대 적층 보드
+│   ├── PlayerHand.tsx        # 하단 엄지손가락 전용 컨트롤 독 (카드 0~6, 칩, 제출/패스/레인보우 선택)
+│   ├── RuleModal.tsx         # 언제든 열람 가능한 3개 국어 게임 규칙 모달
+│   └── LanguageSwitcher.tsx  # ko / en / ja 실시간 언어 전환기
+├── engine/
+│   ├── rules.ts              # 순수 함수 기반 상태 기계(State Machine) 및 룰 정산 로직 (DOM/React 의존 금지)
+│   └── botAI.ts              # 동시 선택(Selection) 및 배치/패스(Placement) 휴리스틱 AI 봇 의사결정
+├── i18n/
+│   └── translations.ts       # 한국어(ko) 기준 엄격한 타입 검증이 적용된 다국어 사전
+├── network/
+│   └── usePeerRoom.ts        # PeerJS 연결, Host 상태 브로드캐스트, Guest 패 마스킹, 단절 시 봇 자동 전환
+├── store/
+│   └── useGameStore.ts       # 클라이언트 전역 상태 및 액션 디스패치
+├── types/
+│   └── game.ts               # 도메인 모델, RoundPhase, Carrier, P2P 메시지, SanitizedGameState 타입
+└── utils/
+    ├── cryptoAuth.ts         # Web Crypto API SHA-256 해싱 유틸리티
+    └── soundEffects.ts       # Web Audio API 기반 실시간 프로시저럴 효과음 엔진
+```
+
+---
+
+## 4. 핵심 게임 규칙 및 상태 기계 불변식 (Invariants)
+에이전트가 게임 로직이나 UI를 수정할 때 아래 룰은 절대 깨뜨려서는 안 된다:
+
+1. **인원 및 라운드:** 총 7인 고정(인간 + AI 봇), 전반부(1~7R) + 후반부(8~14R) 총 14라운드.
+2. **초기 자원:** 바위 카드 7장(`0`~`6`), 색깔 칩 7개(`RED` x2, `GREEN` x2, `BLUE` x2, `RAINBOW` x1).
+3. **라운드 페이즈 흐름 (`RoundPhase`):**
+   - `SELECTION`: 7명 전원이 동시에 칩 1개와 카드 1장을 비밀리에 제출.
+   - `REVEAL_CHIPS`: 전원 제출 완료 후 **색깔 칩만 먼저 일제히 공개**.
+   - `REVEAL_CARDS`: **바위 카드 공개** 및 배치 우선순위 정렬 확정.
+   - `PLACEMENT`: 정렬된 순서대로 한 명씩 큐브 배치 또는 패스 진행.
+   - `ROUND_END`: 전원 배치 완료 후 다음 라운드 선 플레이어 갱신 및 라운드 전진.
+4. **배치 우선순위 정렬 규칙:**
+   - ① `RAINBOW` 칩 제출자 최우선 → ② 바위 카드 숫자가 높은 순(`6 > 5 > 4 > 3 > 2 > 1 > 0`) → ③ 동순위 시 현재 **선 플레이어(`startPlayerId`)** 기준 시계 방향 순.
+5. **패스(Pass) 규칙:**
+   - 플레이어당 라운드별 1회 자신의 배치 차례에 패스 선언 가능(패스로 뒤로 밀린 재차례에는 패스 불가).
+   - 패스하지 않은 모든 플레이어의 배치가 끝난 뒤, 패스한 플레이어들이 **패스를 선언한 순서의 역순(LIFO)**으로 큐브를 배치.
+6. **13 이상 폭발 정산 규칙 (중요):**
+   - 큐브 배치 직후 해당 색상 받침대(`RED`, `GREEN`, `BLUE`)의 합계가 `13` 이상이 되면:
+     1. 방금 배치한 큐브를 **제외한**, 배치 직전까지 해당 받침대에 놓여 있던 기존 큐브들을 모두 수거(제거)한다.
+     2. 해당 플레이어는 **수거된 기존 큐브의 개수**만큼 벌점을 받는다(`penaltyPoints += collectedCount`).
+     3. 방금 배치한 **신규 큐브 1개만 해당 받침대에 남고**, 받침대 합계는 그 큐브의 숫자로 갱신된다.
+7. **선 플레이어 승계 및 7라운드 중간 정산:**
+   - 라운드 종료 시 **가장 마지막으로 벌점을 받은 플레이어**가 다음 라운드 선 플레이어가 된다(벌점자가 없으면 유지).
+   - **7라운드 종료 후(8라운드 시작 시):** 모든 플레이어의 **손패(카드 7장, 칩 7개)만 새로 재지급**하며, **3개 받침대에 쌓여 있던 돌(`stones`)과 합계(`sum`)는 초기화하지 않고 그대로 유지**한다.
+
+---
+
+## 5. 아키텍처, 보안 및 UI 개발 규칙
+- **엔진 순수성 유지:** `src/engine/rules.ts`와 `src/engine/botAI.ts`에는 React 훅, `window`, DOM 접근 코드를 절대 넣지 않는다.
+- **P2P 치팅 방지 마스킹:** Host가 Guest에게 전송하는 `SanitizedGameState`에는 반드시 해당 Guest 본인의 손패만 포함하고, 타인의 보유 패는 개수(`handCount`)만 노출한다. `SELECTION` 단계에서는 타인의 제출 칩/카드 값을 `null`로 마스킹한다.
+- **다국어(i18n) 분리:** P2P 메시지와 상태 스토어 내부에서는 영문 상수(`'RED'`, `'RAINBOW'`, `'PASS'`)와 구조화된 이벤트 데이터만 전달하고, 모든 사용자 노출 문자열은 각 클라이언트 로컬의 `t()` 함수를 통해 `ko`/`en`/`ja`로 렌더링한다.
+- **모바일 퍼스트 단일 뷰포트(`100dvh`) 준수:**
+  - 게임 보드 화면(`GameBoard.tsx`)은 모바일 세로 화면(360px~430px)에서 세로/가로 스크롤이나 하단 버튼 잘림이 발생하지 않도록 `h-dvh overflow-hidden` 레이아웃을 유지한다.
+  - 상단 헤더의 라운드/선 플레이어 왕관 배지 및 유틸리티 버튼은 모바일 폭에서 테두리가 잘리거나 겹치지 않도록 `shrink-0` 및 컴팩트 패딩을 유지한다.
+  - 모바일 `<input>` 요소는 iOS Safari 자동 줌 방지를 위해 최소 `text-base` (`16px`) 이상을 유지한다.
+  - 돌 타일 제출자 정보 툴팁은 Hover뿐만 아니라 모바일 터치(Click/Tap) 토글로도 동작해야 한다.
+- **외부 오디오 에셋 금지:** 효과음은 외부 `.mp3`/`.wav` 파일 없이 `src/utils/soundEffects.ts`의 Web Audio API 합성기만 사용한다.
