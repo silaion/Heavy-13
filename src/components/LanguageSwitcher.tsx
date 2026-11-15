@@ -4,10 +4,14 @@ import { type Language } from '../i18n/translations';
 import { useTranslation } from '../i18n/useTranslation';
 import { playChipSelect, useSoundStore } from '../utils/soundEffects';
 
-const LANGUAGE_OPTIONS: readonly { code: Language; label: string }[] = [
-  { code: 'ko', label: '한국어' },
-  { code: 'en', label: 'EN' },
-  { code: 'ja', label: '日本語' },
+const LANGUAGE_OPTIONS: readonly {
+  code: Language;
+  label: string;
+  shortLabel: string;
+}[] = [
+  { code: 'ko', label: '한국어', shortLabel: 'KO' },
+  { code: 'en', label: 'EN', shortLabel: 'EN' },
+  { code: 'ja', label: '日本語', shortLabel: 'JA' },
 ];
 
 export function LanguageSwitcher() {
@@ -25,14 +29,14 @@ export function LanguageSwitcher() {
   };
 
   return (
-    <div className="inline-flex items-center gap-1.5">
+    <div className="inline-flex items-center gap-1 shrink-0">
       {/* 사운드 음소거(Mute) 토글 버튼 */}
       <button
         type="button"
         onClick={handleToggleMute}
         title={isMuted ? t('soundUnmuteTooltip') : t('soundMuteTooltip')}
         aria-label={isMuted ? t('soundUnmuteTooltip') : t('soundMuteTooltip')}
-        className={`rounded-xl border p-2 transition cursor-pointer select-none flex items-center justify-center ${
+        className={`rounded-xl border p-1.5 sm:p-2 transition cursor-pointer select-none flex items-center justify-center ${
           isMuted
             ? 'border-zinc-800 bg-zinc-900/90 text-zinc-500 hover:text-zinc-300'
             : 'border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
@@ -49,9 +53,9 @@ export function LanguageSwitcher() {
       <div
         role="group"
         aria-label="Language Switcher"
-        className="inline-flex items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-900/90 p-1 shadow-sm"
+        className="inline-flex items-center gap-0.5 rounded-xl border border-zinc-800 bg-zinc-900/90 p-0.5 sm:p-1 shadow-sm"
       >
-        <Globe className="w-3.5 h-3.5 text-zinc-400 ml-1.5 mr-0.5 shrink-0" />
+        <Globe className="hidden sm:inline-block w-3.5 h-3.5 text-zinc-400 ml-1.5 mr-0.5 shrink-0" />
         {LANGUAGE_OPTIONS.map((opt) => {
           const isActive = language === opt.code;
           return (
@@ -62,13 +66,14 @@ export function LanguageSwitcher() {
                 playChipSelect();
                 setLanguage(opt.code);
               }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer select-none ${
+              className={`px-1.5 sm:px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer select-none whitespace-nowrap ${
                 isActive
                   ? 'bg-amber-500 text-zinc-950 shadow-sm'
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70'
               }`}
             >
-              {opt.label}
+              <span className="sm:hidden">{opt.shortLabel}</span>
+              <span className="hidden sm:inline">{opt.label}</span>
             </button>
           );
         })}

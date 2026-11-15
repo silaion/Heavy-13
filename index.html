@@ -1,12 +1,22 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="overscroll-none overflow-x-hidden">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
     <title>무거운 13 (Heavy 13) - 데블스 플랜: 데드 어게인</title>
   </head>
-  <body class="bg-zinc-950 text-zinc-100 antialiased selection:bg-amber-500 selection:text-zinc-950">
-    <div id="root"></div>
+  <body
+    class="bg-zinc-950 text-zinc-100 antialiased selection:bg-amber-500 selection:text-zinc-950 overscroll-none overflow-x-hidden"
+  >
+    <div id="root" class="w-full max-w-full overflow-x-hidden"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

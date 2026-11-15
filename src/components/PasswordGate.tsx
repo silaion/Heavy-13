@@ -81,9 +81,9 @@ export function PasswordGate({ children }: PasswordGateProps) {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-4">
+    <div className="min-h-dvh w-full max-w-full overflow-x-hidden bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center px-3 sm:px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <div
-        className={`w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900/85 backdrop-blur-md p-6 sm:p-8 shadow-2xl space-y-6 transition-transform ${
+        className={`w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900/85 backdrop-blur-md p-5 sm:p-8 shadow-2xl space-y-5 sm:space-y-6 transition-transform overflow-hidden ${
           isShaking ? 'animate-carrier-explode border-red-500/70' : ''
         }`}
       >
@@ -98,8 +98,8 @@ export function PasswordGate({ children }: PasswordGateProps) {
             <Lock className="w-7 h-7 stroke-[2.5]" />
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-bold tracking-wider uppercase">
-            <Sparkles className="w-3 h-3" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold tracking-wider uppercase">
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
             {t('gameTitlePrefix')} {t('gameTitleNumber')} · {t('gateBadge')}
           </div>
 
@@ -127,7 +127,7 @@ export function PasswordGate({ children }: PasswordGateProps) {
           </div>
         )}
 
-        {/* 비밀번호 입력 폼 */}
+        {/* 비밀번호 입력 폼 (text-base 16px: iOS Safari 자동 확대 방지) */}
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div className="space-y-2">
             <label
@@ -149,7 +149,7 @@ export function PasswordGate({ children }: PasswordGateProps) {
                   if (hasError) setHasError(false);
                 }}
                 placeholder={t('gateInputPlaceholder')}
-                className={`w-full rounded-xl border bg-zinc-950/90 pl-4 pr-11 py-3.5 text-sm text-white placeholder-zinc-500 focus:outline-none transition ${
+                className={`w-full min-h-[48px] rounded-xl border bg-zinc-950/90 pl-4 pr-11 py-3 text-base text-white placeholder-zinc-500 focus:outline-none transition ${
                   hasError
                     ? 'border-red-500/70 focus:border-red-400'
                     : 'border-zinc-700 focus:border-amber-400'
@@ -168,7 +168,7 @@ export function PasswordGate({ children }: PasswordGateProps) {
                 aria-label={
                   showPassword ? t('gateHidePassword') : t('gateShowPassword')
                 }
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 transition cursor-pointer"
               >
                 {showPassword ? (
                   <EyeOff className="w-4 h-4" />
@@ -182,7 +182,7 @@ export function PasswordGate({ children }: PasswordGateProps) {
           <button
             type="submit"
             disabled={isVerifying || !passwordInput.trim()}
-            className="w-full rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-extrabold py-3.5 px-5 text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition cursor-pointer"
+            className="w-full min-h-[48px] rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-extrabold py-3.5 px-5 text-sm sm:text-base shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition cursor-pointer"
           >
             <Unlock className="w-4 h-4" />
             {isVerifying ? t('gateVerifyingBtn') : t('gateSubmitBtn')}
