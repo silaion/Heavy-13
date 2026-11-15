@@ -758,6 +758,23 @@ export function gameReducer(
           : p
       );
 
+      const updatedPlacementQueue = state.placementQueue.map((item) =>
+        item.playerId === action.playerId
+          ? { ...item, playerName: botName }
+          : item
+      );
+
+      const existingSub = state.submissions[action.playerId];
+      const updatedSubmissions = existingSub
+        ? {
+            ...state.submissions,
+            [action.playerId]: {
+              ...existingSub,
+              playerName: botName,
+            },
+          }
+        : state.submissions;
+
       const botLog = createStructuredLog(
         state.round,
         'BOT_TAKEOVER',
@@ -772,6 +789,8 @@ export function gameReducer(
       return {
         ...state,
         players: updatedPlayers,
+        placementQueue: updatedPlacementQueue,
+        submissions: updatedSubmissions,
         logs: [...state.logs, botLog],
       };
     }

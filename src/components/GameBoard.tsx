@@ -666,13 +666,13 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
     >
       {/* 1. 상단 영역 (shrink-0): 1줄 유틸리티 헤더 바 + 7인 2단 카드형 그리드 */}
       <div className="shrink-0 space-y-1.5">
-        {/* 상단 유틸리티 바 (라운드/페이즈: text-sm sm:text-base font-bold, 우측 유틸리티 버튼: min-h-[36px] px-2.5 & w-5 h-5 아이콘) */}
-        <header className="rounded-xl sm:rounded-2xl border border-zinc-800 bg-zinc-900/90 backdrop-blur-md px-2.5 sm:px-4 py-1.5 flex items-center justify-between gap-1.5">
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 overflow-x-auto no-scrollbar">
-            {/* 라운드 표시 (text-sm sm:text-base font-bold) */}
-            <div className="min-h-[36px] px-2.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold text-sm sm:text-base whitespace-nowrap shrink-0 flex items-center">
+        {/* 상단 유틸리티 바 (모바일 360px~430px에서도 왕관 배지와 유틸리티 버튼이 잘리거나 겹치지 않도록 최적화) */}
+        <header className="rounded-xl sm:rounded-2xl border border-zinc-800 bg-zinc-900/90 backdrop-blur-md px-2 sm:px-4 py-1.5 flex items-center justify-between gap-1 sm:gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0 shrink-0">
+            {/* 라운드 표시 배지 */}
+            <div className="inline-flex items-center px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-sm whitespace-nowrap shrink-0">
               <span className="sm:hidden">
-                R{round} / {MAX_ROUNDS}
+                R{round}/{MAX_ROUNDS}
               </span>
               <span className="hidden sm:inline">
                 {t('roundBadge', { round, maxRounds: MAX_ROUNDS })} ·{' '}
@@ -680,19 +680,27 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
               </span>
             </div>
 
-            {/* 선 플레이어(👑) */}
+            {/* 선 플레이어(👑 + 짧은 닉네임) 배지: shrink-0 및 rounded-full로 테두리 잘림 방지 */}
             {startPlayer && (
-              <div className="min-h-[36px] text-sm sm:text-base px-2.5 rounded-xl bg-amber-500/10 border border-amber-500/35 text-amber-200 font-bold flex items-center gap-1 whitespace-nowrap shrink-0">
-                <Crown className="w-4 h-4 text-amber-400 shrink-0" />
-                <strong className="text-amber-300 truncate max-w-[4.5rem] sm:max-w-[7.5rem]">
+              <div
+                className="inline-flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-full bg-amber-500/10 border border-amber-500/35 text-amber-200 font-bold text-xs sm:text-sm whitespace-nowrap shrink-0"
+                title={`${t('firstPlayerLabel')}: ${tPlayerName(startPlayer)}`}
+              >
+                <span
+                  className="text-xs sm:text-sm leading-none shrink-0"
+                  aria-hidden="true"
+                >
+                  👑
+                </span>
+                <strong className="text-amber-300 truncate max-w-[52px] sm:max-w-[100px]">
                   {tPlayerName(startPlayer)}
                 </strong>
               </div>
             )}
 
-            {/* 현재 페이즈 상태 텍스트 (text-sm sm:text-base font-bold) */}
-            <div className="min-h-[36px] px-2.5 rounded-xl bg-sky-500/20 border border-sky-400/40 text-sky-300 text-sm sm:text-base font-bold flex items-center gap-1.5 whitespace-nowrap truncate min-w-0">
-              <Eye className="w-4 h-4 shrink-0 hidden sm:inline" />
+            {/* 현재 페이즈 상태 텍스트 (데스크톱/태블릿 보조 표시; 모바일은 하단 독 및 카드 그리드에 표시) */}
+            <div className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs sm:text-sm font-bold whitespace-nowrap truncate min-w-0">
+              <Eye className="w-4 h-4 shrink-0" />
               <span className="truncate">
                 {tPhaseTitle(roundPhase, isPassedTurnOrder)}
               </span>
@@ -700,7 +708,7 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
           </div>
 
           {/* 우측 유틸리티 버튼: 규칙(?), 음소거, 언어 전환(KO/EN/JA), 나가기 */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <RuleButton onClick={() => setIsRuleModalOpen(true)} />
             <LanguageSwitcher />
             <button
@@ -708,9 +716,9 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
               onClick={onLeaveRoom}
               aria-label={t('leaveBtnShort')}
               title={t('leaveBtnShort')}
-              className="min-h-[36px] px-2.5 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-xs sm:text-sm font-semibold text-zinc-300 flex items-center justify-center gap-1 transition cursor-pointer whitespace-nowrap shrink-0"
+              className="p-1.5 sm:p-2 md:px-2.5 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-xs sm:text-sm font-semibold text-zinc-300 flex items-center justify-center gap-1 transition cursor-pointer whitespace-nowrap shrink-0"
             >
-              <LogOut className="w-5 h-5 shrink-0" />
+              <LogOut className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
               <span className="hidden md:inline">{t('leaveBtnShort')}</span>
             </button>
           </div>

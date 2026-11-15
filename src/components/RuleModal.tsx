@@ -44,9 +44,9 @@ export function RuleButton({ onClick }: RuleButtonProps) {
       }}
       title={t('ruleBtnTooltip')}
       aria-label={t('ruleBtnTooltip')}
-      className="min-h-[36px] px-2.5 rounded-xl border border-stone-700 bg-stone-900/90 hover:bg-stone-800 hover:border-amber-500/50 text-xs sm:text-sm font-semibold text-stone-200 hover:text-amber-300 transition cursor-pointer select-none inline-flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap shrink-0"
+      className="p-1.5 sm:p-2 md:px-2.5 rounded-xl border border-stone-700 bg-stone-900/90 hover:bg-stone-800 hover:border-amber-500/50 text-xs sm:text-sm font-semibold text-stone-200 hover:text-amber-300 transition cursor-pointer select-none inline-flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap shrink-0"
     >
-      <HelpCircle className="w-5 h-5 text-amber-400 shrink-0" />
+      <HelpCircle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
       <span className="hidden md:inline">{t('ruleBtnLabel')}</span>
     </button>
   );

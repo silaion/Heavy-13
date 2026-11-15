@@ -4,7 +4,7 @@ import { GameBoard } from './components/GameBoard';
 import { Lobby } from './components/Lobby';
 import { PasswordGate } from './components/PasswordGate';
 import { PlayerHand } from './components/PlayerHand';
-import { useTranslation } from '../src/i18n/useTranslation';
+import { useTranslation } from './i18n/useTranslation';
 import { usePeerRoom } from './network/usePeerRoom';
 import { useGameStore } from './store/useGameStore';
 

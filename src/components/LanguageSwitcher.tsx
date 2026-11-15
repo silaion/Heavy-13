@@ -28,23 +28,23 @@ export function LanguageSwitcher() {
   };
 
   return (
-    <div className="inline-flex items-center gap-1.5 shrink-0">
+    <div className="inline-flex items-center gap-1 sm:gap-1.5 shrink-0">
       {/* 사운드 음소거(Mute) 토글 버튼 */}
       <button
         type="button"
         onClick={handleToggleMute}
         title={isMuted ? t('soundUnmuteTooltip') : t('soundMuteTooltip')}
         aria-label={isMuted ? t('soundUnmuteTooltip') : t('soundMuteTooltip')}
-        className={`min-h-[36px] px-2.5 rounded-xl border transition cursor-pointer select-none flex items-center justify-center shrink-0 ${
+        className={`p-1.5 sm:p-2 rounded-xl border transition cursor-pointer select-none flex items-center justify-center shrink-0 ${
           isMuted
             ? 'border-zinc-800 bg-zinc-900/90 text-zinc-500 hover:text-zinc-300'
             : 'border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
         }`}
       >
         {isMuted ? (
-          <VolumeX className="w-5 h-5" />
+          <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" />
         ) : (
-          <Volume2 className="w-5 h-5" />
+          <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" />
         )}
       </button>
 
@@ -65,7 +65,7 @@ export function LanguageSwitcher() {
                 playChipSelect();
                 setLanguage(opt.code);
               }}
-              className={`min-h-[36px] px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer select-none whitespace-nowrap flex items-center justify-center ${
+              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer select-none whitespace-nowrap flex items-center justify-center ${
                 isActive
                   ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm'
                   : 'text-zinc-300 hover:text-white hover:bg-zinc-800/70'
