@@ -4,7 +4,7 @@ import { GameBoard } from './components/GameBoard';
 import { Lobby } from './components/Lobby';
 import { PasswordGate } from './components/PasswordGate';
 import { PlayerHand } from './components/PlayerHand';
-import { useTranslation } from './i18n/useTranslation';
+import { useTranslation } from '../src/i18n/useTranslation';
 import { usePeerRoom } from './network/usePeerRoom';
 import { useGameStore } from './store/useGameStore';
 
@@ -36,7 +36,7 @@ function GameContent() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between">
+    <div className="h-dvh max-h-dvh w-full max-w-full bg-zinc-950 text-zinc-100 flex flex-col justify-between overflow-hidden overflow-x-hidden select-none">
       <GameBoard onLeaveRoom={disconnectRoom} />
       <PlayerHand />
     </div>

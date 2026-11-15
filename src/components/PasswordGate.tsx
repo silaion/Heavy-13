@@ -81,9 +81,9 @@ export function PasswordGate({ children }: PasswordGateProps) {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-4">
+    <div className="min-h-dvh w-full max-w-full overflow-x-hidden bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center px-3 sm:px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <div
-        className={`w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900/85 backdrop-blur-md p-6 sm:p-8 shadow-2xl space-y-6 transition-transform ${
+        className={`w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900/85 backdrop-blur-md p-5 sm:p-8 shadow-2xl space-y-5 sm:space-y-6 transition-transform ${
           isShaking ? 'animate-carrier-explode border-red-500/70' : ''
         }`}
       >
@@ -98,15 +98,15 @@ export function PasswordGate({ children }: PasswordGateProps) {
             <Lock className="w-7 h-7 stroke-[2.5]" />
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-bold tracking-wider uppercase">
-            <Sparkles className="w-3 h-3" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold tracking-wider uppercase">
+            <Sparkles className="w-3.5 h-3.5" />
             {t('gameTitlePrefix')} {t('gameTitleNumber')} · {t('gateBadge')}
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
             {t('gateTitle')}
           </h1>
-          <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+          <p className="text-sm text-zinc-300 leading-relaxed">
             {t('gateDesc')}
           </p>
         </div>
@@ -149,7 +149,7 @@ export function PasswordGate({ children }: PasswordGateProps) {
                   if (hasError) setHasError(false);
                 }}
                 placeholder={t('gateInputPlaceholder')}
-                className={`w-full rounded-xl border bg-zinc-950/90 pl-4 pr-11 py-3.5 text-sm text-white placeholder-zinc-500 focus:outline-none transition ${
+                className={`w-full min-h-[48px] rounded-xl border bg-zinc-950/90 pl-4 pr-11 py-3 text-base text-white placeholder-zinc-500 focus:outline-none transition ${
                   hasError
                     ? 'border-red-500/70 focus:border-red-400'
                     : 'border-zinc-700 focus:border-amber-400'
@@ -182,7 +182,7 @@ export function PasswordGate({ children }: PasswordGateProps) {
           <button
             type="submit"
             disabled={isVerifying || !passwordInput.trim()}
-            className="w-full rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-extrabold py-3.5 px-5 text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition cursor-pointer"
+            className="w-full min-h-[48px] rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-extrabold py-3.5 px-5 text-sm sm:text-base shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition cursor-pointer"
           >
             <Unlock className="w-4 h-4" />
             {isVerifying ? t('gateVerifyingBtn') : t('gateSubmitBtn')}
