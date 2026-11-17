@@ -17,6 +17,7 @@ import {
 import { useTranslation } from '../i18n/useTranslation';
 import { useGameStore } from '../store/useGameStore';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { GameOptionsModal, SettingsButton } from './GameOptionsModal';
 import { RuleButton, RuleModal } from './RuleModal';
 
 export interface LobbyProps {
@@ -39,6 +40,7 @@ export function Lobby({
   const role = useGameStore((s) => s.role);
   const viewState = useGameStore((s) => s.viewState);
   const myPlayerId = useGameStore((s) => s.myPlayerId);
+  const preferredOptions = useGameStore((s) => s.preferredOptions);
   const connectionError = useGameStore((s) => s.connectionError);
   const startHostGame = useGameStore((s) => s.startHostGame);
 
@@ -46,6 +48,7 @@ export function Lobby({
   const [joinCodeInput, setJoinCodeInput] = useState<string>(initialRoomCode);
   const [copiedType, setCopiedType] = useState<'CODE' | 'LINK' | null>(null);
   const [isRuleModalOpen, setIsRuleModalOpen] = useState<boolean>(false);
+  const [isOptionsModalOpen, setIsOptionsModalOpen] = useState<boolean>(false);
 
   const localizedConnectionError = tError(connectionError);
 
@@ -70,8 +73,9 @@ export function Lobby({
     return (
       <div className="min-h-dvh w-full max-w-full overflow-x-hidden bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center px-3 sm:px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="w-full max-w-xl rounded-3xl border border-zinc-800 bg-zinc-900/85 backdrop-blur-md p-4 sm:p-7 shadow-2xl space-y-4 sm:space-y-5">
-          {/* 우측 상단 게임 규칙(?) 버튼 및 언어 전환 스위치 */}
-          <div className="flex items-center justify-end gap-2">
+          {/* 우측 상단 게임 설정(톱니바퀴), 게임 규칙(?), 언어 전환 스위치 */}
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2">
+            <SettingsButton onClick={() => setIsOptionsModalOpen(true)} />
             <RuleButton onClick={() => setIsRuleModalOpen(true)} />
             <LanguageSwitcher />
           </div>
@@ -202,6 +206,10 @@ export function Lobby({
           isOpen={isRuleModalOpen}
           onClose={() => setIsRuleModalOpen(false)}
         />
+        <GameOptionsModal
+          isOpen={isOptionsModalOpen}
+          onClose={() => setIsOptionsModalOpen(false)}
+        />
       </div>
     );
   }
@@ -209,14 +217,35 @@ export function Lobby({
   // 방 생성/입장 후 7인 슬롯 대기실 화면
   const humanCount = viewState.players.filter((p) => !p.isBot).length;
   const botCount = viewState.players.filter((p) => p.isBot).length;
+  const activeStartPlayerMode =
+    viewState.options?.startPlayerMode ?? preferredOptions.startPlayerMode;
 
   return (
     <div className="min-h-dvh w-full max-w-full overflow-x-hidden bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center px-3 sm:px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-2xl rounded-3xl border border-zinc-800 bg-zinc-900/85 backdrop-blur-md p-4 sm:p-7 shadow-2xl space-y-4 sm:space-y-5">
-        {/* 우측 상단 게임 규칙(?) 버튼 및 언어 전환 스위치 */}
-        <div className="flex items-center justify-end gap-2">
-          <RuleButton onClick={() => setIsRuleModalOpen(true)} />
-          <LanguageSwitcher />
+        {/* 우측 상단 게임 설정(톱니바퀴), 게임 규칙(?), 언어 전환 스위치 */}
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setIsOptionsModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/35 hover:bg-amber-500/20 text-xs sm:text-sm font-bold text-amber-200 transition cursor-pointer whitespace-nowrap"
+          >
+            <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>
+              {t('optionsSummaryPillLabel')}{' '}
+              <strong className="text-amber-300">
+                {activeStartPlayerMode === 'RANDOM'
+                  ? t('optionsModeRandom')
+                  : t('optionsModeHost')}
+              </strong>
+            </span>
+          </button>
+
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <SettingsButton onClick={() => setIsOptionsModalOpen(true)} />
+            <RuleButton onClick={() => setIsRuleModalOpen(true)} />
+            <LanguageSwitcher />
+          </div>
         </div>
 
         {/* 상단 방 코드 및 초대 컨트롤 */}
@@ -385,6 +414,10 @@ export function Lobby({
       <RuleModal
         isOpen={isRuleModalOpen}
         onClose={() => setIsRuleModalOpen(false)}
+      />
+      <GameOptionsModal
+        isOpen={isOptionsModalOpen}
+        onClose={() => setIsOptionsModalOpen(false)}
       />
     </div>
   );

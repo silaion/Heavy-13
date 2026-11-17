@@ -39,6 +39,7 @@ import {
   playTurnAlert,
 } from '../utils/soundEffects';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { GameOptionsModal, SettingsButton } from './GameOptionsModal';
 import { RuleButton, RuleModal } from './RuleModal';
 
 export interface GameBoardProps {
@@ -131,6 +132,7 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
     null
   );
   const [isRuleModalOpen, setIsRuleModalOpen] = useState<boolean>(false);
+  const [isOptionsModalOpen, setIsOptionsModalOpen] = useState<boolean>(false);
   const [tappedStoneId, setTappedStoneId] = useState<string | null>(null);
 
   // 이전 상태 비교용 Ref (초기 마운트 시 불필요한 사운드 재생 방지 및 P2P/봇 액션 동기화 사운드 트리거)
@@ -707,8 +709,9 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
             </div>
           </div>
 
-          {/* 우측 유틸리티 버튼: 규칙(?), 음소거, 언어 전환(KO/EN/JA), 나가기 */}
+          {/* 우측 유틸리티 버튼: 설정, 규칙(?), 음소거, 언어 전환(KO/EN/JA), 나가기 */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <SettingsButton onClick={() => setIsOptionsModalOpen(true)} />
             <RuleButton onClick={() => setIsRuleModalOpen(true)} />
             <LanguageSwitcher />
             <button
@@ -939,6 +942,12 @@ export function GameBoard({ onLeaveRoom }: GameBoardProps) {
       <RuleModal
         isOpen={isRuleModalOpen}
         onClose={() => setIsRuleModalOpen(false)}
+      />
+
+      {/* 게임 설정 모달 (진행 중에는 읽기 전용 확인) */}
+      <GameOptionsModal
+        isOpen={isOptionsModalOpen}
+        onClose={() => setIsOptionsModalOpen(false)}
       />
     </div>
   );

@@ -9,6 +9,7 @@ import type {
   GameLogEntry,
   GameLogEventKey,
   GameLogParams,
+  GameOptions,
   HostGameState,
   PlacementQueueItem,
   Player,
@@ -24,6 +25,10 @@ export const TOTAL_PLAYERS = 7;
 export const MAX_ROUNDS = 14;
 export const HALF_ROUND = 7;
 export const EXPLOSION_THRESHOLD = 13;
+
+export const DEFAULT_GAME_OPTIONS: GameOptions = {
+  startPlayerMode: 'HOST',
+};
 
 export const CARRIER_COLORS: readonly CarrierColor[] = ['RED', 'GREEN', 'BLUE'];
 export const INITIAL_ROCK_CARDS: readonly RockCard[] = [0, 1, 2, 3, 4, 5, 6];
@@ -176,8 +181,14 @@ export function buildPlacementQueue(
 export function createLobbyState(
   roomCode: string,
   hostId: string,
-  hostName: string
+  hostName: string,
+  initialOptions?: Partial<GameOptions>
 ): HostGameState {
+  const resolvedOptions: GameOptions = {
+    startPlayerMode:
+      initialOptions?.startPlayerMode === 'RANDOM' ? 'RANDOM' : 'HOST',
+  };
+
   const players: Player[] = Array.from(
     { length: TOTAL_PLAYERS },
     (_, slotIndex) => {
@@ -222,6 +233,7 @@ export function createLobbyState(
     roundPhase: 'SELECTION',
     round: 1,
     half: 1,
+    options: resolvedOptions,
     players,
     startPlayerId: hostId,
     roundStarterIndex: 0,
@@ -306,8 +318,13 @@ export function addGuestToLobby(
 
 /**
  * 게임 시작 (1라운드 SELECTION 단계 개시, 전원 초기 카드 7장 및 색깔 칩 7개 지급)
+ * - options.startPlayerMode === 'RANDOM'이면 7인(인간 + AI 봇) 중 무작위 1명을 1라운드 선 플레이어로 추첨
+ * - options.startPlayerMode === 'HOST'이면 방장(슬롯 #1)을 1라운드 선 플레이어로 지정
  */
-export function startGame(state: HostGameState): HostGameState {
+export function startGame(
+  state: HostGameState,
+  rng: () => number = Math.random
+): HostGameState {
   const players = state.players.map((p) => ({
     ...p,
     cards: createInitialCards(),
@@ -319,7 +336,10 @@ export function startGame(state: HostGameState): HostGameState {
     isEliminated: false,
   }));
 
-  const starter = players[0];
+  const starter =
+    state.options.startPlayerMode === 'RANDOM'
+      ? (players[Math.floor(rng() * players.length)] ?? players[0])
+      : (players.find((p) => p.isHost) ?? players[0]);
 
   return {
     ...state,
@@ -408,6 +428,13 @@ export function validateAction(
   action: GameAction
 ): { valid: boolean; reason?: string } {
   if (action.type === 'RESET_TO_LOBBY') {
+    return { valid: true };
+  }
+
+  if (action.type === 'UPDATE_GAME_OPTIONS') {
+    if (state.phase !== 'LOBBY') {
+      return { valid: false, reason: 'err_OPTIONS_LOCKED_IN_GAME' };
+    }
     return { valid: true };
   }
 
@@ -738,7 +765,24 @@ export function gameReducer(
   switch (action.type) {
     case 'RESET_TO_LOBBY': {
       const host = state.players.find((p) => p.isHost) ?? state.players[0];
-      return createLobbyState(state.roomCode, host.id, host.name);
+      return createLobbyState(state.roomCode, host.id, host.name, state.options);
+    }
+
+    case 'UPDATE_GAME_OPTIONS': {
+      const nextMode =
+        action.options.startPlayerMode === 'RANDOM'
+          ? 'RANDOM'
+          : action.options.startPlayerMode === 'HOST'
+            ? 'HOST'
+            : state.options.startPlayerMode;
+
+      return {
+        ...state,
+        options: {
+          ...state.options,
+          startPlayerMode: nextMode,
+        },
+      };
     }
 
     case 'REPLACE_WITH_BOT': {
@@ -1241,6 +1285,7 @@ export function sanitizeGameStateForPlayer(
     roundPhase: state.roundPhase,
     round: state.round,
     half: state.half,
+    options: { ...state.options },
     myPlayerId: targetPlayerId,
     myHand: {
       cards: me ? [...me.cards] : [],
