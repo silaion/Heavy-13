@@ -4,6 +4,7 @@ import type {
   CarrierColor,
   ChipColor,
   GameAction,
+  GameOptions,
   HostGameState,
   RockCard,
   SanitizedGameState,
@@ -11,6 +12,7 @@ import type {
 import {
   addGuestToLobby,
   createLobbyState,
+  DEFAULT_GAME_OPTIONS,
   gameReducer,
   resolveTargetCarrier,
   sanitizeGameStateForPlayer,
@@ -48,6 +50,7 @@ export interface GameStoreState {
 
   hostState: HostGameState | null;
   viewState: SanitizedGameState | null;
+  preferredOptions: GameOptions;
 
   // SELECTION 단계: 손패에서 선택한 카드 & 칩
   selectedCard: RockCard | null;
@@ -72,6 +75,9 @@ export interface GameStoreState {
   ) => { joined: boolean; reason?: string };
   handleGuestDisconnect: (guestId: string) => void;
   startHostGame: () => void;
+  updateGameOptions: (
+    options: Partial<GameOptions>
+  ) => { valid: boolean; reason?: string };
   proceedFromHalfTime: () => void;
   resetToLobby: () => void;
   dispatchHostAction: (
@@ -86,6 +92,40 @@ export interface GameStoreState {
   confirmPlacement: () => { valid: boolean; reason?: string };
   passTurn: () => { valid: boolean; reason?: string };
   leaveRoom: () => void;
+}
+
+const GAME_OPTIONS_STORAGE_KEY = 'heavy13_game_options';
+
+function loadSavedGameOptions(): GameOptions {
+  if (typeof window === 'undefined') {
+    return { ...DEFAULT_GAME_OPTIONS };
+  }
+  try {
+    const raw = window.localStorage.getItem(GAME_OPTIONS_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_GAME_OPTIONS };
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null) {
+      const mode = (parsed as { startPlayerMode?: unknown }).startPlayerMode;
+      return {
+        startPlayerMode: mode === 'RANDOM' ? 'RANDOM' : 'HOST',
+      };
+    }
+  } catch {
+    // localStorage 접근 불가 또는 파싱 실패 시 기본값 사용
+  }
+  return { ...DEFAULT_GAME_OPTIONS };
+}
+
+function saveGameOptions(options: GameOptions): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(
+      GAME_OPTIONS_STORAGE_KEY,
+      JSON.stringify(options)
+    );
+  } catch {
+    // 저장 실패 시 무시
+  }
 }
 
 let activeAutomationCleanup: (() => void) | null = null;
@@ -136,6 +176,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     lastActionError: null,
     hostState: null,
     viewState: null,
+    preferredOptions: loadSavedGameOptions(),
     selectedCard: null,
     selectedChip: null,
     selectedTargetCarrier: null,
@@ -184,7 +225,12 @@ export const useGameStore = create<GameStoreState>((set, get) => {
 
     initHostLobby: (roomCode, hostId, hostName) => {
       clearActiveAutomationTimer();
-      const lobbyState = createLobbyState(roomCode, hostId, hostName);
+      const lobbyState = createLobbyState(
+        roomCode,
+        hostId,
+        hostName,
+        get().preferredOptions
+      );
       const hostView = sanitizeGameStateForPlayer(lobbyState, hostId);
 
       set({
@@ -265,6 +311,39 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         lastActionError: null,
       });
       commitHostState(startedState);
+    },
+
+    updateGameOptions: (partialOptions) => {
+      const { role, hostState, preferredOptions } = get();
+      const nextOptions: GameOptions = {
+        startPlayerMode:
+          partialOptions.startPlayerMode === 'RANDOM'
+            ? 'RANDOM'
+            : partialOptions.startPlayerMode === 'HOST'
+              ? 'HOST'
+              : preferredOptions.startPlayerMode,
+      };
+
+      if (role === 'GUEST') {
+        return { valid: false, reason: 'err_NO_HOST_PERMISSION' };
+      }
+
+      if (role === 'HOST') {
+        if (!hostState || hostState.phase !== 'LOBBY') {
+          return { valid: false, reason: 'err_OPTIONS_LOCKED_IN_GAME' };
+        }
+        saveGameOptions(nextOptions);
+        set({ preferredOptions: nextOptions });
+        return get().dispatchHostAction({
+          type: 'UPDATE_GAME_OPTIONS',
+          options: nextOptions,
+        });
+      }
+
+      // 방 생성 전(role === 'NONE')에는 브라우저 기본 설정으로 저장
+      saveGameOptions(nextOptions);
+      set({ preferredOptions: nextOptions });
+      return { valid: true };
     },
 
     proceedFromHalfTime: () => {

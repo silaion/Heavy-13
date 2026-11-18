@@ -6,6 +6,12 @@ export type CarrierColor = 'RED' | 'GREEN' | 'BLUE';
 
 export type ChipColor = CarrierColor | 'RAINBOW';
 
+export type StartPlayerMode = 'HOST' | 'RANDOM';
+
+export interface GameOptions {
+  startPlayerMode: StartPlayerMode;
+}
+
 export type GamePhase =
   | 'LOBBY'
   | 'PLAYING'
@@ -218,6 +224,7 @@ export interface HostGameState {
   roundPhase: RoundPhase;
   round: number; // 1 ~ 14 (1~7 전반부, 8~14 후반부)
   half: 1 | 2;
+  options: GameOptions;
   players: Player[]; // 항상 7인 슬롯 유지
   startPlayerId: string; // 현재 라운드 선 플레이어 ID
   roundStarterIndex: number; // 선 플레이어 슬롯 인덱스 (0 ~ 6)
@@ -244,6 +251,7 @@ export interface SanitizedGameState {
   roundPhase: RoundPhase;
   round: number;
   half: 1 | 2;
+  options: GameOptions;
   myPlayerId: string;
   myHand: {
     cards: RockCard[];
@@ -292,6 +300,10 @@ export type GameAction =
   | {
       type: 'REPLACE_WITH_BOT';
       playerId: string;
+    }
+  | {
+      type: 'UPDATE_GAME_OPTIONS';
+      options: Partial<GameOptions>;
     }
   | {
       type: 'RESET_TO_LOBBY';

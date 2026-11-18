@@ -245,6 +245,8 @@ const ko = {
   err_HOST_PEER_ERROR: '호스트 P2P 오류가 발생했습니다: {detail}',
   err_JOIN_FAILED:
     '방 접속 실패 ({roomCode}): 호스트를 찾을 수 없거나 네트워크 오류가 발생했습니다. ({detail})',
+  err_OPTIONS_LOCKED_IN_GAME:
+    '게임이 시작된 이후에는 옵션을 변경할 수 없습니다.',
 
   // Structured Event Logs
   log_LOBBY_CREATED:
@@ -337,6 +339,34 @@ const ko = {
   ruleSec4CarrierLabel: '받침대 돌·합계 유지',
   ruleSec4CarrierDesc:
     '3개 받침대(RED, GREEN, BLUE) 위에 이미 쌓여 있는 돌과 합계는 초기화되지 않고 8라운드로 그대로 유지됩니다.',
+
+  // Game Options Modal (GameOptionsModal.tsx)
+  optionsBtnLabel: '설정',
+  optionsBtnTooltip: '게임 설정',
+  optionsModalBadge: 'GAME SETTINGS',
+  optionsModalTitle: '게임 설정',
+  optionsModalSubtitle: '첫 라운드 선 플레이어 등 경기 규칙 옵션을 확인하거나 변경합니다',
+  optionsModalCloseBtn: '닫기',
+  optionsStartPlayerTitle: '첫 라운드 선 플레이어',
+  optionsStartPlayerDesc:
+    '1라운드에서 동순위 정렬 기준이 되는 최초 선 플레이어(👑) 결정 방식을 선택합니다.',
+  optionsModeHost: '방장 (호스트)',
+  optionsModeHostDesc: '항상 방장(슬롯 #1)이 1라운드 선 플레이어로 시작합니다.',
+  optionsModeRandom: '랜덤',
+  optionsModeRandomDesc:
+    '게임 시작 시 7명의 참가자(인간 + AI 봇) 중 무작위 1명이 추첨됩니다.',
+  optionsSubsequentRoundsTip:
+    '※ 2라운드 이후부터는 직전 라운드에서 가장 마지막으로 벌점을 받은 플레이어가 선 플레이어를 승계합니다.',
+  optionsHostEditableNotice:
+    '방장 권한으로 게임 시작 전까지 설정을 변경할 수 있습니다.',
+  optionsReadOnlyGuestNotice:
+    '방장만 게임 시작 전에 변경할 수 있습니다. (현재 설정 확인 전용)',
+  optionsReadOnlyPlayingNotice:
+    '이미 게임이 시작되어 설정을 변경할 수 없습니다. (현재 적용 중인 설정)',
+  optionsLocalPrefNotice:
+    '새 방을 만들 때 기본으로 적용될 설정이며 브라우저에 자동 저장됩니다.',
+  optionsCurrentBadge: '적용 중',
+  optionsSummaryPillLabel: '1R 선:',
 };
 
 export type TranslationSchema = Record<keyof typeof ko, string>;
@@ -585,6 +615,8 @@ const en: TranslationSchema = {
   err_HOST_PEER_ERROR: 'Host P2P error: {detail}',
   err_JOIN_FAILED:
     'Failed to join room ({roomCode}): Host not found or network error. ({detail})',
+  err_OPTIONS_LOCKED_IN_GAME:
+    'Game options cannot be changed after the match has started.',
 
   // Structured Event Logs
   log_LOBBY_CREATED:
@@ -677,6 +709,35 @@ const en: TranslationSchema = {
   ruleSec4CarrierLabel: 'Carriers Carried Over Intact',
   ruleSec4CarrierDesc:
     'Stones and current sums already stacked on the 3 Carriers (RED, GREEN, BLUE) are NOT reset and carry directly into Round 8.',
+
+  // Game Options Modal (GameOptionsModal.tsx)
+  optionsBtnLabel: 'Settings',
+  optionsBtnTooltip: 'Game Settings',
+  optionsModalBadge: 'GAME SETTINGS',
+  optionsModalTitle: 'Game Settings',
+  optionsModalSubtitle: 'View or configure Round 1 First Player and match options',
+  optionsModalCloseBtn: 'Close',
+  optionsStartPlayerTitle: 'Round 1 First Player',
+  optionsStartPlayerDesc:
+    'Choose how the initial First Player (👑) for Round 1 clockwise tie-breakers is decided.',
+  optionsModeHost: 'Host',
+  optionsModeHostDesc:
+    'The Room Host (Slot #1) always starts Round 1 as the First Player.',
+  optionsModeRandom: 'Random',
+  optionsModeRandomDesc:
+    'Randomly selects 1 of the 7 players (humans + AI bots) at match start.',
+  optionsSubsequentRoundsTip:
+    '※ From Round 2 onward, the last player to receive penalty points inherits First Player.',
+  optionsHostEditableNotice:
+    'As Host, you can change these settings before starting the match.',
+  optionsReadOnlyGuestNotice:
+    'Only the Host can change this before the game starts. (Read-only)',
+  optionsReadOnlyPlayingNotice:
+    'Match is already in progress; settings are locked. (Currently active)',
+  optionsLocalPrefNotice:
+    'Saved locally as your default when creating a new room.',
+  optionsCurrentBadge: 'Active',
+  optionsSummaryPillLabel: 'R1 1st:',
 };
 
 const ja: TranslationSchema = {
@@ -922,6 +983,8 @@ const ja: TranslationSchema = {
   err_HOST_PEER_ERROR: 'ホストP2Pエラー: {detail}',
   err_JOIN_FAILED:
     'ルーム接続失敗 ({roomCode}): ホストが見つからないかネットワークエラーが発生しました。({detail})',
+  err_OPTIONS_LOCKED_IN_GAME:
+    'ゲーム開始後はオプションを変更できません。',
 
   // Structured Event Logs
   log_LOBBY_CREATED:
@@ -1014,6 +1077,34 @@ const ja: TranslationSchema = {
   ruleSec4CarrierLabel: '台座の石・合計はそのまま維持',
   ruleSec4CarrierDesc:
     '3つの台座(RED, GREEN, BLUE)にすでに積まれている石と合計はリセットされず、そのまま第8ラウンドへ引き継がれます。',
+
+  // Game Options Modal (GameOptionsModal.tsx)
+  optionsBtnLabel: '設定',
+  optionsBtnTooltip: 'ゲーム設定',
+  optionsModalBadge: 'GAME SETTINGS',
+  optionsModalTitle: 'ゲーム設定',
+  optionsModalSubtitle: '第1ラウンドの先手プレイヤーなどゲーム設定を確認・変更します',
+  optionsModalCloseBtn: '閉じる',
+  optionsStartPlayerTitle: '第1ラウンド先手プレイヤー',
+  optionsStartPlayerDesc:
+    '第1ラウンドの同順判定基準となる最初の先手プレイヤー(👑)の決定方法を選択します。',
+  optionsModeHost: 'ホスト (房長)',
+  optionsModeHostDesc: '常にホスト(スロット #1)が第1ラウンドの先手になります。',
+  optionsModeRandom: 'ランダム',
+  optionsModeRandomDesc:
+    'ゲーム開始時に7名(人間＋AIボット)の中からランダムで1名が選ばれます。',
+  optionsSubsequentRoundsTip:
+    '※ 第2ラウンド以降は、前ラウンドで最後に罰点を受けたプレイヤーが先手を引き継ぎます。',
+  optionsHostEditableNotice:
+    'ホスト権限により、ゲーム開始前まで設定を変更できます。',
+  optionsReadOnlyGuestNotice:
+    'ホストのみゲーム開始前に変更できます。（閲覧専用）',
+  optionsReadOnlyPlayingNotice:
+    'すでにゲームが開始されているため設定を変更できません。（現在適用中）',
+  optionsLocalPrefNotice:
+    '新しくルームを作成する際のデフォルト設定としてブラウザに保存されます。',
+  optionsCurrentBadge: '適用中',
+  optionsSummaryPillLabel: '1R先手:',
 };
 
 export const translations: Record<Language, TranslationSchema> = {
